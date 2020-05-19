@@ -1,0 +1,3249 @@
+diff -cr RasMol_2.7.2.1.1/src/command.c RasMol_2.7.2.1.1_20180920/src/command.c
+*** RasMol_2.7.2.1.1/src/command.c	2004-01-27 09:00:34.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/command.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 395,401 ****
+  
+      /* Perform filename globbing */
+      if( *name=='~' )
+!     {   ptr = username;  name++;
+          while( *name && (*name!=' ') && (*name!='/') )
+              *ptr++ = *name++;
+          *ptr = '\0';
+--- 395,402 ----
+  
+      /* Perform filename globbing */
+      if( *name=='~' )
+!     {   
+! 	ptr = username;  name++;
+          while( *name && (*name!=' ') && (*name!='/') )
+              *ptr++ = *name++;
+          *ptr = '\0';
+***************
+*** 415,421 ****
+  
+          while( *temp )
+              *ptr++ = *temp++;
+!     } else ptr = DataFileName;
+  
+      /* Strip dubious characters! */
+      while( *name && (*name!=' ') )
+--- 416,424 ----
+  
+          while( *temp )
+              *ptr++ = *temp++;
+!     } else {
+! 	ptr = DataFileName;
+!     }
+  
+      /* Strip dubious characters! */
+      while( *name && (*name!=' ') )
+***************
+*** 468,479 ****
+--- 471,491 ----
+  {
+      register int done;
+      char __far *temp;
++     int	groflag;
+  
+      temp = getenv("RASMOLCIF");
+      if (temp) {
+        UseCIF = 0;
+        if (!strncasecmp(temp,"cif",3)) UseCIF = 1;
+      }
++     /*angel start gro check*/
++    groflag = strlen(DataFileName);
++    temp = DataFileName+(groflag-3);
++    if (DataFileName[groflag-4] == '.' && !strncasecmp(temp,"gro",3) )  {
++       format = FormatGRO;
++    }
++     /*angel end gro check*/
++ 
+      DataFileFormat = 0;
+      switch( format )
+      {   case(FormatPDB):      done = LoadPDBMolecule(fp,False);  break;
+***************
+*** 492,497 ****
+--- 504,510 ----
+  #ifdef CEXIOLIB
+          case(FormatCEX):      done = LoadCEXMolecule(fp);        break;
+  #endif
++         case(FormatGRO):      done = LoadGROMolecule(fp);        break;  //angel
+          default:              done = False;
+      }
+  
+***************
+*** 1594,1599 ****
+--- 1607,1624 ----
+      } else CommandError(MsgStrs[ErrBadOpt]);
+  }
+  
++ static void ExecutePSPFCommand( void )
++ {
++     FetchToken();
++     if( !CurToken || (CurToken==FalseTok) )
++     {   ReDrawFlag |= RFRefresh;
++         DrawPageFrame = False;
++     } else if( CurToken == TrueTok )
++     {   ReDrawFlag |= RFRefresh;
++         DrawPageFrame = True;
++     } else CommandError(MsgStrs[ErrBadOpt]);
++ }
++ 
+  
+  static void ExecuteBoundBoxCommand( void )
+  {
+***************
+*** 2399,2404 ****
+--- 2424,2430 ----
+          case(PickingTok):  ExecutePickingCommand();  break;
+          case(TitleTok):    ExecuteTitleCommand();    break;
+          case(UnitCellTok): ExecuteUnitCellCommand(); break;
++         case(PSPageFrameTok):     ExecutePSPFCommand();     break;
+  
+          case(DotsTok):
+  			FetchToken();
+***************
+*** 2441,2446 ****
+--- 2467,2473 ----
+  static void ExecuteColourCommand( void )
+  {
+      register int flag;
++     char buffer[50];
+  
+      flag = 0;
+      switch( FetchToken() )
+***************
+*** 2571,2577 ****
+--- 2598,2615 ----
+              } else CommandError(MsgStrs[ErrNoCol]);
+              break;
+  
++ 	// angel start add
+          case(AxesTok):
++             FetchToken();
++             if( ParseColour() )
++             {   AxesR = RVal;  AxesG = GVal;  AxesB = BVal;
++                 ReDrawFlag |= RFColour;
++             } else if( CurToken )
++             {      CommandError(MsgStrs[ErrColour]);
++             } else CommandError(MsgStrs[ErrNoCol]);
++             break;
++ 	// angel end
++ 
+          case(BoundBoxTok):
+          case(UnitCellTok):
+              FetchToken();
+***************
+*** 3294,3299 ****
+--- 3332,3338 ----
+          case(SpanishTok):    SwitchLang(Spanish);        break;
+          case(TitleTok):      ExecuteTitleCommand();      break;
+          case(UnitCellTok):   ExecuteUnitCellCommand();   break;
++         case(PSPageFrameTok):     ExecutePSPFCommand();     break;
+  
+          case(RefreshTok):    RefreshScreen();            break;
+          case(ZapTok):        ZapDatabase();              break;
+***************
+*** 3882,3887 ****
+--- 3921,3974 ----
+                            /* UpdateScrollBars(); */
+                            break;
+  
++ // added by icfd 100726
++ // begin
++         case(FocusTok):                                 /* stern */
++                         FetchToken();
++                         if( !CurToken)
++                         {   Focus = (DefaultFocus > MinFocus)
++                                         ? DefaultFocus : MinFocus;
++                             ReDrawFlag |= (RFRefresh | RFMagnify);
++                         } else if( CurToken==TrueTok )
++                         {   char buffer[40];
++                             Focus = MinFocus;
++                             sprintf(buffer, "Minimum Focus: %d\n",
++                                         (int)(MinFocus*100)+1 );
++                             WriteString(buffer);
++                             ReDrawFlag |= (RFRefresh | RFMagnify);
++                         } else if( CurToken==FalseTok )
++                         {   Focus = 0.0;
++                             ReDrawFlag |= RFRefresh | RFMagnify;
++                         } else if( CurToken==NumberTok )
++                         {   if( TokenValue/100.0<MinFocus)
++                             {
++ #ifdef WITHOUT_CHECK_FOCUS_VALUE
++                                 Focus = TokenValue/100.0;
++                                 ReDrawFlag |= (RFRefresh | RFMagnify);
++ #else
++ // modified by icfd 100727
++ // begin
++ //                                CommandError(ErrorMsg[ErrBadOpt]);
++ // end
++                                 CommandError(MsgStrs[ErrBadOpt]);
++ #endif
++                             } else if( TokenValue<=1000 )
++                             {   Focus = TokenValue/100.0;
++                                 ReDrawFlag |= (RFRefresh | RFMagnify);
++                             } else
++ // modified by icfd 100727
++ // begin
++ //                                CommandError(ErrorMsg[ErrBigNum]);
++                                 CommandError(MsgStrs[ErrBigNum]);
++ // end
++ // modified by icfd 100727
++ // begin
++ //                        } else CommandError(ErrorMsg[ErrNotNum]);
++                         } else CommandError(MsgStrs[ErrNotNum]);
++ // end
++                         break;
++ // end
++ 
+          case(RotateTok):  FetchToken();
+                            if( CurToken==XTok )
+                            {   option = 0;
+diff -cr RasMol_2.7.2.1.1/src/command.h RasMol_2.7.2.1.1_20180920/src/command.h
+*** RasMol_2.7.2.1.1/src/command.h	2004-05-08 04:48:35.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/command.h	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 97,103 ****
+  #define Tok2Format(x) ((x)-359)
+  #define Format2Tok(x) ((x)+359)
+  
+! #define IsMoleculeFormat(x)  ((x)<=16)
+  
+  #define FormatPDB        1
+  #define FormatMacroMod   2
+--- 97,104 ----
+  #define Tok2Format(x) ((x)-359)
+  #define Format2Tok(x) ((x)+359)
+  
+! //#define IsMoleculeFormat(x)  ((x)<=16)
+! #define IsMoleculeFormat(x)  ((x)<=17)   //angel
+  
+  #define FormatPDB        1
+  #define FormatMacroMod   2
+***************
+*** 115,120 ****
+--- 116,122 ----
+  #define FormatXYZ       14
+  #define FormatCIF       15
+  #define FormatCEX       16
++ #define FormatGRO       17        //angel
+  
+  #define FormatDots      20
+  
+***************
+*** 138,143 ****
+--- 140,149 ----
+  
+  int DefaultBackground = True;
+  
++ //angel start
++ int DrawPageFrame;
++ //angel end
++ 
+  #else
+  extern int DataFileFormat;
+  extern char DataFileName[1024];
+***************
+*** 151,156 ****
+--- 157,165 ----
+  extern int AllowWrite;
+  
+  extern int DefaultBackground;
++ //angel start
++ extern int DrawPageFrame;
++ //angel end
+  #endif
+  
+  int ProcessCharacter( int );
+diff -cr RasMol_2.7.2.1.1/src/infile.c RasMol_2.7.2.1.1_20180920/src/infile.c
+*** RasMol_2.7.2.1.1/src/infile.c	2004-05-08 04:47:24.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/infile.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 869,874 ****
+--- 869,1031 ----
+      return;
+  }
+  
++ // angel start
++ int LoadGROMolecule( FILE *fp )
++ {
++     register RAtom __far *ptr;
++     auto Long serno,srcatm,dstatm;
++     register Long dx,dy,dz;
++     register int i,ir,jr,kr,type;
++     auto long atoms;
++     char   chr;
++ 
++     DataFile = fp;
++     FetchRecord(DataFile, Record);
++     FetchRecord(DataFile, Record);
++     atoms = (int)ReadValue(0,strlen(Record));
++ 
++ 
++     if ( !atoms )
++ 	    return False;
++ 
++     CreateChain(' ');
++     for (i=1; i<=atoms; i++) 
++     {
++ 	FetchRecord(DataFile,Record);
++ 
++ 	dx = 10*ReadPDBCoord(20);
++ 	dy = 10*ReadPDBCoord(28);
++ 	dz = 10*ReadPDBCoord(36);
++ 
++ 	serno = (int)ReadValue(0,5);
++ 	if ( !CurGroup || CurGroup->serno != serno)
++ 	{
++ 	   CreateGroup(GroupPool);
++            CurGroup->refno = FindResNo( Record+5 );
++ 	   CurGroup->serno = serno;
++ 	   ProcessGroup(False);
++ 	}
++ 	
++ 	/* Handle GRO Files rigth justified format*/
++ 	ir=10;
++ 	jr=0;
++ 	kr=0;
++ 	do {
++ 	   ir++;
++ 	   chr = Record[ir];
++ 	   if ( chr != ' ') {
++ 		kr=isdigit(chr);
++ 		jr=1;
++ 	   }
++ 	} while(!kr && !jr && ir<15);
++ 
++ 	if( kr ) {
++ 	   kr=ir-11;
++ 	   for(jr=ir; jr<15; jr++) {
++ 	      Record[jr-kr] = Record[jr];
++ 	   }
++ 	   kr=15-ir;
++ 	   for(jr=kr+11; jr<15; jr++) {
++ 	      Record[jr] = ' ';
++ 	   }
++ 	}
++ 
++ 	if( (Record[11]==' ') && (Record[12]==' ') )
++ 	{   /* Right Justified Atom Name! */
++ 	    if( Record[13] == ' ' )
++ 	    {   Record[12] = Record[14];
++ 		Record[14] = ' ';
++ 	    } else
++ 	    {   Record[12] = Record[13];
++ 		Record[13] = Record[14];
++ 		Record[14] = ' ';
++ 	    }
++ 	}
++ 
++ 	ptr = CreateAtom();
++ 	ptr->refno = ComplexAtomType(Record+11);
++ 	ptr->serno = (int)ReadValue(15,5);
++ 
++ 	ptr->xorg = dx/4;
++ 	ptr->yorg = dy/4;
++ 	ptr->zorg = -dz/4;
++ 	ptr->xtrl = (short)(10*(dx-4*ptr->xorg));
++ 	ptr->ytrl = (short)(10*(dy-4*ptr->yorg));
++ 	ptr->ztrl = (short)(10*(-dz-4*ptr->zorg));
++ 
++ 	ProcessAtom(ptr);
++     }
++ 
++     FetchRecord(DataFile,Record);
++     //Process UnitCell
++     double V1[3],V2[3],V3[3];
++     int    j,rlength,result_cell,NM2A=10,NM2A_2=100;
++ 
++     /*Assign a dummy name for the spacegroup*/
++     strcpy(Info.spacegroup,"P1");
++     /*Assign a DataFileName to Info.filename*/
++     strcpy(Info.filename,DataFileName);
++     /*Read box vector*/
++     for (i=0; i<3; i++) {
++ 	V1[i] = 0.0; V2[i] = 0.0; V3[i] = 0.0;
++     }
++     rlength = strlen(Record)/10;
++     V1[0] = ReadDecValue( 0,10);
++     V2[1] = ReadDecValue(10,10);
++     V3[2] = ReadDecValue(20,10);
++     if (rlength > 3) {
++ 	V1[1] = ReadDecValue(30,10);
++ 	V1[2] = ReadDecValue(40,10);
++ 	V2[0] = ReadDecValue(50,10);
++ 	V2[2] = ReadDecValue(60,10);
++ 	V3[0] = ReadDecValue(70,10);
++ 	V3[1] = ReadDecValue(80,10);
++     }
++     /*Obtain the lengths of the a, b, c vectors*/
++     Info.cella = Info.cell[0] = sqrt(V1[0]*V1[0]+V1[1]*V1[1]+V1[2]*V1[2])*NM2A;
++     Info.cellb = Info.cell[1] = sqrt(V2[0]*V2[0]+V2[1]*V2[1]+V2[2]*V2[2])*NM2A;
++     Info.cellc = Info.cell[2] = sqrt(V3[0]*V3[0]+V3[1]*V3[1]+V3[2]*V3[2])*NM2A;
++ 
++     /*Obtain the alpha,beta,gamma angles*/
++     if ( Info.cella<=0.0 || Info.cellb <=0.0 || Info.cellc <=0.0 ) {
++ 	Info.cella = Info.cell[0] = 0.0;
++ 	Info.cellb = Info.cell[1] = 0.0;
++ 	Info.cellc = Info.cell[2] = 0.0;
++ 	Info.cellalpha = 0.0;
++ 	Info.cellbeta  = 0.0;
++ 	Info.cellgamma = 0.0;
++ 	Info.cell[3]   = 90.0;
++ 	Info.cell[4]   = 90.0;
++ 	Info.cell[5]   = 90.0;
++     } else {
++ 	Info.cellalpha = acos( (V2[0]*V3[0]+V2[1]*V3[1]+V2[2]*V3[2])*NM2A_2/(Info.cellb*Info.cellc) );
++ 	Info.cellbeta  = acos( (V1[0]*V3[0]+V1[1]*V3[1]+V1[2]*V3[2])*NM2A_2/(Info.cella*Info.cellc) );
++ 	Info.cellgamma = acos( (V1[0]*V2[0]+V1[1]*V2[1]+V1[2]*V2[2])*NM2A_2/(Info.cella*Info.cellb) );
++ 	Info.cell[3] = Rad2Deg*Info.cellalpha;
++ 	Info.cell[4] = Rad2Deg*Info.cellbeta;
++ 	Info.cell[5] = Rad2Deg*Info.cellgamma;
++     }
++ 
++ 
++     result_cell = cell2mat(Info.cell, Info.matf2o, Info.mato2f);
++     if( !result_cell )
++       result_cell |= invxfrm(Info.mato2f,Info.veco2f,Info.matf2o,Info.vecf2o);
++     if (result_cell) { 
++       WriteString("Error: Invalid BOX VECTORS\n\n");
++       for ( i=0; i<3; i++ ) {
++         Info.vecf2o[i] =  Info.veco2f[i] =  Info.cell[i] = 0.;
++         Info.cell[i+3] = 90.;
++         for ( j=0; j<3; j++) { 
++           Info.matf2o[i][j] = Info.mato2f[i][j] = ((i!=j)?0.:1.);
++         }
++       }
++     }
++ 
++     DataFileFormat = FormatGRO;
++     return True;
++ }
++ //angel end
++ 
+  int LoadPDBMolecule( FILE *fp,  int flag )
+  {
+      register FeatEntry __far *ptr;
+diff -cr RasMol_2.7.2.1.1/src/infile.h RasMol_2.7.2.1.1_20180920/src/infile.h
+*** RasMol_2.7.2.1.1/src/infile.h	2004-05-08 04:48:42.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/infile.h	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 106,111 ****
+--- 106,112 ----
+  int LoadXYZMolecule( FILE* );
+  int LoadCEXMolecule( FILE* );
+  int LoadCIFMolecule( FILE* );
++ int LoadGROMolecule( FILE* );
+  
+  int SaveAlchemyMolecule( char* );
+  int SavePDBMolecule( char* );
+diff -cr RasMol_2.7.2.1.1/src/outfile.c RasMol_2.7.2.1.1_20180920/src/outfile.c
+*** RasMol_2.7.2.1.1/src/outfile.c	2004-05-08 04:47:42.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/outfile.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 142,149 ****
+--- 142,155 ----
+  
+  #ifdef INVERT
+  #define InvertY(y) (y)
++ //angel start
++ #define ProperY(y) (-y)
++ //angel end
+  #else
+  #define InvertY(y) (-(y))
++ //angel start
++ #define ProperY(y) (y)
++ //angel end
+  #endif
+  
+  #ifdef EIGHTBIT
+***************
+*** 256,262 ****
+  static int VectSolid;
+  static int VectCol;
+  
+! 
+  
+  /*=======================*/
+  /*  Function Prototypes  */
+--- 262,289 ----
+  static int VectSolid;
+  static int VectCol;
+  
+! // added by icfd 100722
+! // begin
+! /* stern */
+! /* define BoundBox and Axes as pseudo-atoms */
+! #define NUM_ORIGIN      1
+! #define NUM_AXES        6
+! #define NUM_CORNERS     8
+! #define NUM_EDGES       12
+! static RAtom AxesAtoms[NUM_ORIGIN + NUM_AXES + NUM_CORNERS];
+! static Bond AxesBonds[NUM_AXES + NUM_EDGES];
+! #define ForAllAxesAtoms for(j = 0, aptr = AxesAtoms; \
+!                             j < NUM_ORIGIN + NUM_AXES + NUM_CORNERS; \
+!                             ++j, ++aptr)
+! #define ForEachAxisAtom for(j = 0, aptr = AxesAtoms; \
+!                             j < NUM_ORIGIN + NUM_AXES; \
+!                             ++j, ++aptr)
+! #define ForEachBoxAtom  for(j = 0, aptr = AxesAtoms + NUM_ORIGIN + NUM_AXES; \
+!                             j < NUM_CORNERS; \
+!                             ++j, ++aptr)
+! #define ForEachAxis  for(bptr=AxesBonds;bptr;bptr=bptr->bnext)
+! #define ForEachBox   for(bptr=AxesBonds+NUM_AXES;bptr;bptr=bptr->bnext)
+! // end
+  
+  /*=======================*/
+  /*  Function Prototypes  */
+***************
+*** 269,274 ****
+--- 296,309 ----
+  static void WriteVectSphere( PSItemPtr __far*, char __far*, int );
+  static void WriteVectStick( RAtom __far*, RAtom __far*, int, int );
+  static void WriteVectWire( RAtom __far*, RAtom __far*, int, int );
++ 
++ // added by icfd 100722
++ // begin
++ static void CreateAxesAtoms( void );                            /* stern */
++ static void TransformAxesAtoms( void );
++ static int FetchPSBoxItems( PSItemPtr __far*, char __far* );
++ // end
++ 
+  static void FetchPSItems( PSItemPtr __far*, char __far* );
+  static void WritePSItems( PSItemPtr __far*, char __far*, int );
+  
+***************
+*** 1337,1343 ****
+  /*  Vector PostScript Generation  */
+  /*================================*/
+  
+! static int FindDepth( PSItemPtr item,  int type )
+  {
+      register Monitor __far *monit;
+      register HBond __far *hbond;
+--- 1372,1378 ----
+  /*  Vector PostScript Generation  */
+  /*================================*/
+  
+! static int FindDepth( PSItemPtr item, int type )
+  {
+      register Monitor __far *monit;
+      register HBond __far *hbond;
+***************
+*** 1349,1359 ****
+      {   case(PSAtom):    atom = (RAtom __far*)item;
+                           return atom->z;
+  
+          case(PSBond):    bond = (Bond __far*)item;
+                           result = bond->srcatom->z;
+!                          if( result < bond->dstatom->z )
+!                              result = bond->dstatom->z;
+                           return result;
+  
+          case(PSSSBond):  
+          case(PSHBond):   hbond = (HBond __far*)item;
+--- 1384,1417 ----
+      {   case(PSAtom):    atom = (RAtom __far*)item;
+                           return atom->z;
+  
++ // modified by icfd 100722
++ // begin
++ /*        case(PSBond):    bond = (Bond __far*)item;
++ *                         result = bond->srcatom->z;
++ *                         if( result < bond->dstatom->z )
++ *                             result = bond->dstatom->z;
++ *                         return result;
++ */
+          case(PSBond):    bond = (Bond __far*)item;
+                           result = bond->srcatom->z;
+!                          //if (bond->col == BoxCol)       /* stern; axes/box! */
+!                          if (bond->col == AxesCol || bond->col ==BoxCol)       /* angel; axes/box! */
+!                          {
+!                              if( bond->srcatom->elemno < NUM_ORIGIN+NUM_AXES)
+!                              {                          /* axes: use center */
+!                                  result = (result + bond->dstatom->z)/2;
+!                              } else
+!                              {                          /* box: use corners */
+!                                  if( result < bond->dstatom->z )
+!                                      result = bond->dstatom->z;
+!                                 /* admix depth for parallel case (q&d) */
+!                                 result = (int)(0.9 * result + 0.1 *
+!                                     (bond->srcatom->z + bond->dstatom->z)/2);
+!                             }
+!                          } else                         /* normal: use center */
+!                              result = (result + bond->dstatom->z)/2;
+                           return result;
++ // end
+  
+          case(PSSSBond):  
+          case(PSHBond):   hbond = (HBond __far*)item;
+***************
+*** 1495,1503 ****
+--- 1553,1579 ----
+      register SphereSect *sptr;
+      SphereSect sect[MAXSECT];
+  
++     // added by angel, icfd 20180315
++     // start
++     int x1, y1, z1, x2, y2, z2;
++     // end
++ 
++ // modified by icfd 100722
++ // begin
+      ptr = (RAtom __far*)data[index];
+      radf = ((Real)ptr->radius)*Scale;
+  
++ // V2.6.4
++ //    ptr = (RAtom __far*)data[index];
++ //    radf = ptr->irad;                   /* focus */
++ // end
++ 
++     // added by angel, icfd 20180315
++     // start
++     x1=ptr->x; y1=ptr->y; z1=ptr->z;
++     FocusPoint(&x1, &y1, &z1);
++     // end
++ 
+      count = 0;
+      ecount = 0;
+      sptr = sect;
+***************
+*** 1510,1529 ****
+          if( atm->z + atm->irad < ptr->z )
+              continue;
+  
+!         dx = atm->x - ptr->x; 
+!         dy = atm->y - ptr->y; 
+!         dz = atm->z - ptr->z;
+  
+          dist2 = (Long)dx*dx + (Long)dy*dy;
+          dist3 = dist2 + dz*dz;
+  
+          radb = ((Real)atm->radius)*Scale;  
+          temp = radf + radb;
+  
+          /* Atoms don't intersect! */
+          if( dist3 > temp*temp ) continue;
+  
+          d = sqrt( (double)dist3 );
+          f = (temp*(radf-radb)+dist3)/(2.0*d);
+          theta = -dz/d;
+  
+--- 1586,1624 ----
+          if( atm->z + atm->irad < ptr->z )
+              continue;
+  
+!         
+!         // added by angel, icfd 20180315
+!         // start
+!         x2=atm->x; y2=atm->y; z2=atm->z;
+!         FocusPoint(&x2, &y2, &z2);
+!         // end
+! 
+!         dx = x2 - x1; 
+!         dy = y2 - y1; 
+!         dz = z2 - z1;
+  
+          dist2 = (Long)dx*dx + (Long)dy*dy;
+          dist3 = dist2 + dz*dz;
+  
++ // modified by icfd 100722
++ // begin
+          radb = ((Real)atm->radius)*Scale;  
+          temp = radf + radb;
+  
++ // V2.6.4
++ //        radb = atm->irad;               /* focus */
++ //        temp = radf + radb;
++ // end
++ 
+          /* Atoms don't intersect! */
+          if( dist3 > temp*temp ) continue;
+  
+          d = sqrt( (double)dist3 );
++ 
++ // modified by icfd 100722
++ // begin
++ //        if (d == 0) ++d;                /* sanity for multiple origin Atoms */
++ // end
+          f = (temp*(radf-radb)+dist3)/(2.0*d);
+          theta = -dz/d;
+  
+***************
+*** 1563,1584 ****
+              sptr->epsi = phi2;
+  
+              temp = f/d;
+!             sptr->ex = ptr->x+temp*dx;
+!             sptr->ey = ptr->y+temp*dy;
+  
+              sptr->srad = radf;
+              sptr->sphi = psi;
+              sptr->spsi = phi1;
+!             sptr->sx = ptr->x;
+!             sptr->sy = ptr->y;
+  
+          } else
+!         {   x = sqrt( (radf-g)*(radf+g) );
+! 
+              sptr->srad = x;
+              sptr->erad = 0.0;
+!             sptr->sx = ptr->x;
+!             sptr->sy = ptr->y;
+              sptr->sphi = 180;
+              sptr->spsi = -180;
+          }
+--- 1658,1683 ----
+              sptr->epsi = phi2;
+  
+              temp = f/d;
+!             sptr->ex = x1+temp*dx;
+!             sptr->ey = y1+temp*dy;
+  
+              sptr->srad = radf;
+              sptr->sphi = psi;
+              sptr->spsi = phi1;
+!             sptr->sx = x1;
+!             sptr->sy = y1;
+  
+          } else
+! // modified by icfd 100723
+! // begin
+! /*        {   x = sqrt( (radf-g)*(radf+g) );
+! */
+!         {   x = (radf > g) ? sqrt( (radf-g)*(radf+g) ) : 0;
+! // end
+              sptr->srad = x;
+              sptr->erad = 0.0;
+!             sptr->sx = x1;
+!             sptr->sy = y1;
+              sptr->sphi = 180;
+              sptr->spsi = -180;
+          }
+***************
+*** 1606,1612 ****
+      }
+  
+      if( UseOutLine )
+!     {   temp = (ptr->z-ZOffset)/ImageSize + 1.0;
+          if( temp != LineWidth )
+          {   fprintf(OutFile,"%g setlinewidth\n",temp);
+              LineWidth = temp;
+--- 1705,1711 ----
+      }
+  
+      if( UseOutLine )
+!     {   temp = (z1-ZOffset)/ImageSize + 1.0;
+          if( temp != LineWidth )
+          {   fprintf(OutFile,"%g setlinewidth\n",temp);
+              LineWidth = temp;
+***************
+*** 1652,1658 ****
+          fprintf(OutFile,"%g ",(Real)RLut[i]/255.0);
+          fprintf(OutFile,"%g ",(Real)GLut[i]/255.0);
+          fprintf(OutFile,"%g ",(Real)BLut[i]/255.0);
+!         fprintf(OutFile,"%g %ld %ld ",radf,ptr->x,ptr->y);
+          fputs("Sphere\n\n",OutFile);
+      }
+  }
+--- 1751,1757 ----
+          fprintf(OutFile,"%g ",(Real)RLut[i]/255.0);
+          fprintf(OutFile,"%g ",(Real)GLut[i]/255.0);
+          fprintf(OutFile,"%g ",(Real)BLut[i]/255.0);
+!         fprintf(OutFile,"%g %ld %ld ",radf,x1,y1);
+          fputs("Sphere\n\n",OutFile);
+      }
+  }
+***************
+*** 1673,1678 ****
+--- 1772,1782 ----
+      register Long dist2;
+      register int inten;
+  
++     // added by angel, icfd 20180315
++     // start
++     int x1, y1, z1, x2, y2, z2;
++     // end
++ 
+      if( src->z > dst->z )
+      {   tmp = src;
+          src = dst;
+***************
+*** 1684,1701 ****
+          col2 = dst->col;
+      } else col1 = col2 = col;
+  
+      if( UseBackFade )
+!     {   dz = (src->z+dst->z)>>1;
+          inten = (ColourDepth*(dz+ImageRadius-ZOffset))/ImageSize;
+      } else inten = ColourMask;
+  
+!     dx = dst->x - src->x;  
+!     dy = dst->y - src->y;
+      dist2 = dx*dx + dy*dy;
+      dist = sqrt( (double)dist2 );
+  
+      if( dst->flag & SphereFlag )
+      {   radius = ((Real)dst->radius)*Scale;
+          if( dist <= radius ) return;
+  
+          /* Test for second half obscured! */
+--- 1788,1822 ----
+          col2 = dst->col;
+      } else col1 = col2 = col;
+  
++     // added by angel, icfd 20180315
++     // start
++     x1=src->x; y1=src->y; z1=src->z;
++     x2=dst->x; y2=dst->y; z2=dst->z;
++     FocusPoint(&x1, &y1, &z1);
++     FocusPoint(&x2, &y2, &z2);
++     // end
++ 
+      if( UseBackFade )
+!     {   dz = (z1+z2)>>1;
+          inten = (ColourDepth*(dz+ImageRadius-ZOffset))/ImageSize;
+      } else inten = ColourMask;
+  
+!     dx = x2 - x1;  
+!     dy = y2 - y1;
+      dist2 = dx*dx + dy*dy;
+      dist = sqrt( (double)dist2 );
++ // added by icfd 100723
++ // begin
++     if (dist <= 0) return;            /* stern */
++ // end
+  
+      if( dst->flag & SphereFlag )
++ // modified by icfd 100723
++ // begin
+      {   radius = ((Real)dst->radius)*Scale;
++ // V2.6.4
++ //    {   radius = dst->irad;             /* focus */
++ // end
+          if( dist <= radius ) return;
+  
+          /* Test for second half obscured! */
+***************
+*** 1704,1710 ****
+--- 1825,1836 ----
+      }
+  
+      if( src->flag & SphereFlag )
++ // modified by icfd 100723
++ // begin
+      {   radius = ((Real)src->radius)*Scale;
++ // V2.6.4
++ //    {   radius = src->irad;             /* focus */
++ // end
+          if( dist <= radius ) return;
+  
+          /* Test for first half obscured! */
+***************
+*** 1712,1720 ****
+              col1 = col2;
+      }
+  
+!     WriteVectColour( col1+inten );
+  
+!     dz = (src->z+dst->z)>>1;
+      temp = (double)(dz-ZOffset)/ImageSize + 1.0;
+      if( temp != LineWidth )
+      {   fprintf(OutFile,"%g setlinewidth\n",temp);
+--- 1838,1851 ----
+              col1 = col2;
+      }
+  
+! // modified by icfd 100723
+! // begin
+! //    WriteVectColour( col1+inten );
+!     //WriteVectColour( (col1 == BoxCol) ? col1 : col1 + inten );  /*stern */
+!     WriteVectColour( (col1 == AxesCol || col1 == BoxCol) ? col1 : col1 + inten );  /*angel */
+! // end
+  
+!     dz = (z2+z1)>>1;
+      temp = (double)(dz-ZOffset)/ImageSize + 1.0;
+      if( temp != LineWidth )
+      {   fprintf(OutFile,"%g setlinewidth\n",temp);
+***************
+*** 1733,1755 ****
+          }
+  
+      if( src->flag & SphereFlag )
+!     {   dz = dst->z - src->z;
+          dist = sqrt( (double)(dist2 + dz*dz) );
+!         endx = src->x + (radius*dx)/dist;
+!         endy = src->y + (radius*dy)/dist;
+          fprintf(OutFile,"%g %g ",endx,endy);
+      } else
+!         fprintf(OutFile,"%ld %ld ",src->x,src->y);
+  
+      if( col1 != col2 )
+!     {   midx = 0.5*(src->x + dst->x);
+!         midy = 0.5*(src->y + dst->y);
+          fprintf(OutFile,"%g %g Wire\n",midx,midy);
+  
+          WriteVectColour( col2+inten );
+          fprintf(OutFile,"%g %g ",midx,midy);
+      } 
+!     fprintf(OutFile,"%ld %ld Wire\n",dst->x,dst->y);
+  }
+  
+  
+--- 1864,1886 ----
+          }
+  
+      if( src->flag & SphereFlag )
+!     {   dz = z2 - z1;
+          dist = sqrt( (double)(dist2 + dz*dz) );
+!         endx = x1 + (radius*dx)/dist;
+!         endy = y1 + (radius*dy)/dist;
+          fprintf(OutFile,"%g %g ",endx,endy);
+      } else
+!         fprintf(OutFile,"%ld %ld ",x1,y1);
+  
+      if( col1 != col2 )
+!     {   midx = 0.5*(x1 + x2);
+!         midy = 0.5*(y1 + y2);
+          fprintf(OutFile,"%g %g Wire\n",midx,midy);
+  
+          WriteVectColour( col2+inten );
+          fprintf(OutFile,"%g %g ",midx,midy);
+      } 
+!     fprintf(OutFile,"%ld %ld Wire\n",x2,y2);
+  }
+  
+  
+***************
+*** 1769,1774 ****
+--- 1900,1910 ----
+      register int col1, col2;
+      register int i, inten;
+  
++     // added by angel, icfd 20180315
++     // start
++     int x1, y1, z1, x2, y2, z2;
++     // end
++ 
+      if( !rad )
+      {   WriteVectWire(src,dst,col,False);
+          return;
+***************
+*** 1785,1799 ****
+          col2 = dst->col;
+      } else col1 = col2 = col;
+  
+!     dx = dst->x - src->x;  
+!     dy = dst->y - src->y;
+!     dz = dst->z - src->z;
+      dist2 = dx*dx + dy*dy;
+      dist3 = sqrt( (double)(dist2 + dz*dz) );
+      dist = sqrt( (double)dist2 );
+  
+      if( dst->flag & SphereFlag )
+      {   radius = ((Real)dst->radius)*Scale;
+          if( dist <= radius ) return;
+  
+          /* Test for nearest half obscured! */
+--- 1921,1952 ----
+          col2 = dst->col;
+      } else col1 = col2 = col;
+  
+!     // added by angel, icfd 20180315
+!     // start
+!     x1=src->x; y1=src->y; z1=src->z;
+!     x2=dst->x; y2=dst->y; z2=dst->z;
+!     FocusPoint(&x1, &y1, &z1);
+!     FocusPoint(&x2, &y2, &z2);
+!     // end
+! 
+!     dx = x2 - x1;  
+!     dy = y2 - y1;
+!     dz = z2 - z1;
+      dist2 = dx*dx + dy*dy;
+      dist3 = sqrt( (double)(dist2 + dz*dz) );
+      dist = sqrt( (double)dist2 );
++ // added by icfd 100723
++ // begin
++     if (dist <= 0 || dist3 <= 0) return;      /* stern */
++ // end
+  
+      if( dst->flag & SphereFlag )
++ // modified by icfd 100723
++ // begin
+      {   radius = ((Real)dst->radius)*Scale;
++ // V2.6.4
++ //    {   radius = dst->irad;             /* focus */
++ // end
+          if( dist <= radius ) return;
+  
+          /* Test for nearest half obscured! */
+***************
+*** 1802,1808 ****
+--- 1955,1966 ----
+      }
+  
+      if( src->flag & SphereFlag )
++ // modified by icfd 100723
++ // begin
+      {   radius = ((Real)src->radius)*Scale;
++ // V2.6.4
++ //    {   radius = src->irad;             /* focus */
++ // end
+          if( dist <= radius ) return;
+  
+          /* Test for furthest half obscured! */
+***************
+*** 1815,1833 ****
+          VectSolid = True;
+      }
+  
+!     temp = ((src->z-ZOffset)+(dst->z-ZOffset))/ImageSize + 1.0;
+      if( temp != LineWidth )
+      {   fprintf(OutFile,"%g setlinewidth\n",temp);
+          LineWidth = temp;
+      }
+  
+      radius = ((Real)rad)*Scale;
+      angle = Rad2Deg*atan2((double)dy,(double)dx);
+      inten = (int)((dist/dist3)*ColourMask);
+  
+      if( col1 != col2 )
+!     {   midx = 0.5*(src->x + dst->x);
+!         midy = 0.5*(src->y + dst->y);
+          relx = (radius*dx)/dist;
+          rely = (radius*dy)/dist;
+  
+--- 1973,1996 ----
+          VectSolid = True;
+      }
+  
+!     temp = ((z1-ZOffset)+(z2-ZOffset))/ImageSize + 1.0;
+      if( temp != LineWidth )
+      {   fprintf(OutFile,"%g setlinewidth\n",temp);
+          LineWidth = temp;
+      }
+  
++ // modified by icfd 100723
++ // begin
+      radius = ((Real)rad)*Scale;
++ // V2.6.4
++ //    radius = rad*Scale*FocusScale(0.5*(src->z + dst->z) - ZOffset);
++ // end
+      angle = Rad2Deg*atan2((double)dy,(double)dx);
+      inten = (int)((dist/dist3)*ColourMask);
+  
+      if( col1 != col2 )
+!     {   midx = 0.5*(x1 + x2);
+!         midy = 0.5*(y1 + y2);
+          relx = (radius*dx)/dist;
+          rely = (radius*dy)/dist;
+  
+***************
+*** 1836,1850 ****
+  
+          ratio = dz/dist3;
+  
+          if( (src->flag&SphereFlag) && (src->radius>rad) )
+          {   temp = (Scale*(Real)(src->radius))/dist3;
+!             endx = src->x + temp*dx;
+!             endy = src->y + temp*dy;
+  
+              fprintf(OutFile,"%g %g %g ",radius,ratio,angle);
+              fprintf(OutFile,"%g %g StickEnd\n",endx,endy);
+          } else
+!         {   fprintf(OutFile,"%ld %ld %g ",src->x,src->y,radius);
+              fprintf(OutFile,"%g %g arc\n",angle+90,angle-90);
+          }
+          fputs("closepath ",OutFile);
+--- 1999,2019 ----
+  
+          ratio = dz/dist3;
+  
++ // modified by icfd 100723
++ // begin
+          if( (src->flag&SphereFlag) && (src->radius>rad) )
+          {   temp = (Scale*(Real)(src->radius))/dist3;
+! // V2.6.4 
+! //        if( (src->flag&SphereFlag) && (src->irad>radius) )      /* focus */
+! //        {   temp = (src->irad)/dist3;                           /* focus */
+! // end
+!             endx = x1 + temp*dx;
+!             endy = y1 + temp*dy;
+  
+              fprintf(OutFile,"%g %g %g ",radius,ratio,angle);
+              fprintf(OutFile,"%g %g StickEnd\n",endx,endy);
+          } else
+!         {   fprintf(OutFile,"%ld %ld %g ",x1,y1,radius);
+              fprintf(OutFile,"%g %g arc\n",angle+90,angle-90);
+          }
+          fputs("closepath ",OutFile);
+***************
+*** 1855,1861 ****
+          fprintf(OutFile,"%g ",(Real)BLut[i]/255.0);
+          fputs("setrgbcolor fill\n",OutFile);
+  
+!         fprintf(OutFile,"%ld %ld %g ",dst->x,dst->y,radius);
+          fprintf(OutFile,"%g %g arc\n",angle-90,angle+90);
+          fprintf(OutFile,"%g %g %g ",radius,ratio,angle);
+          fprintf(OutFile,"%g %g StickEnd\n",midx,midy);
+--- 2024,2030 ----
+          fprintf(OutFile,"%g ",(Real)BLut[i]/255.0);
+          fputs("setrgbcolor fill\n",OutFile);
+  
+!         fprintf(OutFile,"%ld %ld %g ",x2,y2,radius);
+          fprintf(OutFile,"%g %g arc\n",angle-90,angle+90);
+          fprintf(OutFile,"%g %g %g ",radius,ratio,angle);
+          fprintf(OutFile,"%g %g StickEnd\n",midx,midy);
+***************
+*** 1868,1902 ****
+          fputs("setrgbcolor fill\n",OutFile);
+  
+          if( UseOutLine )
+!         {   fprintf(OutFile,"%ld %ld %g ",dst->x,dst->y,radius);
+              fprintf(OutFile,"%g %g arc\n",angle-90,angle+90);
+              if( (src->flag&SphereFlag) && (src->radius>rad) )
+              {   fprintf(OutFile,"%g %g %g ",radius,ratio,angle);
+                  fprintf(OutFile,"%g %g StickEnd\n",endx,endy);
+              } else
+!             {   fprintf(OutFile,"%ld %ld %g ",src->x,src->y,radius);
+                  fprintf(OutFile,"%g %g arc\n",angle+90,angle-90);
+              }
+              fputs("closepath 0 setgray stroke\n",OutFile);
+          }
+      } else /* col1 == col2! */
+!     {   fprintf(OutFile,"%ld %ld %g ",dst->x,dst->y,radius);
+          fprintf(OutFile,"%g %g arc\n",angle-90,angle+90);
+  
+          if( (src->flag&SphereFlag) && (src->radius>rad) )
+          {   temp = (Scale*(Real)(src->radius))/dist3;
+!             endx = src->x + temp*dx;
+!             endy = src->y + temp*dy;
+              ratio = dz/dist3;
+  
+              fprintf(OutFile,"%g %g %g ",radius,ratio,angle);
+              fprintf(OutFile,"%g %g StickEnd\n",endx,endy);
+          } else
+!         {   fprintf(OutFile,"%ld %ld %g ",src->x,src->y,radius);
+              fprintf(OutFile,"%g %g arc\n",angle+90,angle-90);
+          }
+  
+!         i = col1 + inten;
+          fprintf(OutFile,"%g ",(Real)RLut[i]/255.0);
+          fprintf(OutFile,"%g ",(Real)GLut[i]/255.0);
+          fprintf(OutFile,"%g ",(Real)BLut[i]/255.0);
+--- 2037,2087 ----
+          fputs("setrgbcolor fill\n",OutFile);
+  
+          if( UseOutLine )
+!         {   fprintf(OutFile,"%ld %ld %g ",x2,y2,radius);
+              fprintf(OutFile,"%g %g arc\n",angle-90,angle+90);
++ // modified by icfd 100723
++ // begin
+              if( (src->flag&SphereFlag) && (src->radius>rad) )
++ // V2.6.4
++ //            if( (src->flag&SphereFlag) && (src->irad>radius) )
++ // end
+              {   fprintf(OutFile,"%g %g %g ",radius,ratio,angle);
+                  fprintf(OutFile,"%g %g StickEnd\n",endx,endy);
+              } else
+!             {   fprintf(OutFile,"%ld %ld %g ",x1,y1,radius);
+                  fprintf(OutFile,"%g %g arc\n",angle+90,angle-90);
+              }
+              fputs("closepath 0 setgray stroke\n",OutFile);
+          }
+      } else /* col1 == col2! */
+!     {   fprintf(OutFile,"%ld %ld %g ",x2,y2,radius);
+          fprintf(OutFile,"%g %g arc\n",angle-90,angle+90);
+  
++ // modified by icfd 100723
++ // begin
+          if( (src->flag&SphereFlag) && (src->radius>rad) )
+          {   temp = (Scale*(Real)(src->radius))/dist3;
+! // V2.6.4
+! //        if( (src->flag&SphereFlag) && (src->irad>radius) )      /* focus */
+! //        {   temp = (src->irad)/dist3;                           /* focus */
+! // end
+!             endx = x1 + temp*dx;
+!             endy = y1 + temp*dy;
+              ratio = dz/dist3;
+  
+              fprintf(OutFile,"%g %g %g ",radius,ratio,angle);
+              fprintf(OutFile,"%g %g StickEnd\n",endx,endy);
+          } else
+!         {   fprintf(OutFile,"%ld %ld %g ",x1,y1,radius);
+              fprintf(OutFile,"%g %g arc\n",angle+90,angle-90);
+          }
+  
+! // modified by icfd 100723
+! // begin
+! //        i = col1 + inten;
+!         //i = (col1 == BoxCol) ? col1 : col1 + inten;     /*stern */
+!         i = (col1 == AxesCol || col1 == BoxCol) ? col1 : col1 + inten;     /*angel */
+! // end
+          fprintf(OutFile,"%g ",(Real)RLut[i]/255.0);
+          fprintf(OutFile,"%g ",(Real)GLut[i]/255.0);
+          fprintf(OutFile,"%g ",(Real)BLut[i]/255.0);
+***************
+*** 1911,1921 ****
+--- 2096,2115 ----
+      register DotStruct __far *ptr;
+      register Real x,y,z;
+      register Real xi,yi;
++ // added by icfd 100723
++ // begin
++     register Real fn,zn;
++ // end
+      register int inten;
+      register int temp, tump;
+      register int zi;
+      register int i;
+  
++     // added by angel, icfd 20180315
++     // start
++     int x1, y1, z1;
++     // end
++ 
+      if( LineWidth != 1.0 )
+      {   fputs("1 setlinewidth\n",OutFile);
+          LineWidth = 1.0;
+***************
+*** 1930,1935 ****
+--- 2124,2131 ----
+              z = ptr->zpos[i];
+  
+  
++ // modified by icfd 100723
++ // begin
+              xi = (x*MatX[0]+y*MatX[1]+z*MatX[2]) + XOffset;
+              if( (xi<0.0) || (xi>=XRange) ) continue;
+              yi = (x*MatY[0]+y*MatY[1]+z*MatY[2]) + YOffset;
+***************
+*** 1939,1947 ****
+--- 2135,2167 ----
+              if( UseSlabPlane && (zi>=temp) ) continue;
+              if( UseDepthPlane && (zi<=tump) ) continue;
+  
++             // added by angel, icfd 20180315
++             // start
++             x1=xi; y1=yi; z1=zi;
++             FocusPoint(&x1, &y1, &z1);
++             xi=x1; yi=y1; zi=z1;
++             // end
++ 
+              inten = (ColourDepth*(zi+ImageRadius))/ImageSize;
+              WriteVectColour( ptr->col[i]+inten );
+              fprintf(OutFile,"%g %g Dot\n",xi,yi);
++ // V2.6.4
++ //            /* get depth and focus */
++ //            /* zi = (int)(x*MatZ[0]+y*MatZ[1]+z*MatZ[2]); */
++ //            zn = x*MatZ[0]+y*MatZ[1]+z*MatZ[2];
++ //            zi = (int)zn + ZOffset;
++ //            if( UseSlabPlane && (zi >= SlabValue) ) continue;
++ //            fn = FocusScale(zn);
++ //
++ //            /* then lateral coordinates */
++ //            /* xi = (x*MatX[0]+y*MatX[1]+z*MatX[2]) + XOffset; */
++ //            xi = ((x*MatX[0]+y*MatX[1]+z*MatX[2]) * fn)+XOffset;
++ //            if( (xi<0.0) || (xi>=XRange) ) continue;
++ //
++ //            /* yi = (x*MatY[0]+y*MatY[1]+z*MatY[2]) + YOffset; */
++ //            yi = ((x*MatY[0]+y*MatY[1]+z*MatY[2]) * fn)+YOffset;
++ //            if( (yi<0.0) || (yi>=YRange) ) continue;
++ // end
+          }
+  }
+  
+***************
+*** 1953,1958 ****
+--- 2173,2187 ----
+      register RAtom __far *aptr;
+      register Label *label;
+      auto unsigned char buffer[80];
++ // added by icfd 100723
++ // begin
++     register int j;
++ // end
++ 
++     // added by angel, icfd 20180315
++     // start
++     int x, y, z;
++     // end
+  
+      fputs("/Times-Roman",OutFile); /* Courier or Courier-Bold? */
+      fprintf(OutFile," findfont %d scalefont setfont\n",FontSize<<1);
+***************
+*** 1971,1978 ****
+  
+              label = (Label*)aptr->label;
+              FormatLabel(chain,group,aptr,label->label,buffer);
+!             fprintf(OutFile,"(%s) %ld %ld Label\n",buffer,aptr->x,aptr->y);
+          }
+  }
+  
+  
+--- 2200,2274 ----
+  
+              label = (Label*)aptr->label;
+              FormatLabel(chain,group,aptr,label->label,buffer);
+!             x=aptr->x; y=aptr->y; z=aptr->z;
+! 
+!             // added by angel, icfd 20180315
+!             // start
+!             FocusPoint(&x, &y, &z);
+!             // end
+! 
+!             fprintf(OutFile,"(%s) %ld %ld Label\n",buffer,x,y);
+!         }
+! 
+! // added by icfd 100723
+! // begin
+!     /* stern */
+!     //if (DrawAxes || DrawBoundBox || DrawUnitCell )
+!     //    if( BackR || BackG || BackB )   /* ?? */
+!     //    {   fprintf(OutFile,"%g %g %g setrgbcolor\n",
+!     //                BoxR/255.0, BoxG/255.0, BoxB/255.0);
+!     //    } else fputs("0 setgray\n",OutFile);
+! 
+!     // angel
+!     if (DrawAxes )
+!         if( BackR || BackG || BackB )   /* ?? */
+!         {   fprintf(OutFile,"%g %g %g setrgbcolor\n",
+!                     AxesR/255.0, AxesG/255.0, AxesB/255.0);
+!         } else fputs("0 setgray\n",OutFile);
+! 
+!     if (DrawAxes)
+!     {
+!         for (j = 0, aptr = AxesAtoms + NUM_ORIGIN;
+!             j < NUM_AXES;
+!             j += 2, aptr += 2)
+!        {
+!             register RAtom __far *bptr = aptr + 1;  /* pick end towards user */
+! 
+!             if( aptr->z >= bptr->z)             /* prefer +[XYZ] if equal */
+!                 bptr = aptr;
+! 
+!             // added by angel, icfd 20180315
+!             // start
+!             x=bptr->x; y=bptr->y; z=bptr->z;
+!             FocusPoint(&x, &y, &z);
+!             // end
+! 
+!             if( bptr->label )   /* skip FormatLabel -- constant axes! */
+!                 fprintf(OutFile,"(%s) %d %d Label\n",
+!                             ((Label*)bptr->label)->label,x,y);
+          }
++     }
++ 
++     if (DrawBoundBox || DrawUnitCell )
++         if( BackR || BackG || BackB )   /* ?? */
++         {   fprintf(OutFile,"%g %g %g setrgbcolor\n",
++                     BoxR/255.0, BoxG/255.0, BoxB/255.0);
++         } else fputs("0 setgray\n",OutFile);
++ 
++     if (DrawBoundBox || DrawUnitCell )
++         ForEachBoxAtom
++         {
++             // added by angel, icfd 20180315
++             // start
++             x=aptr->x; y=aptr->y; z=aptr->z;
++             FocusPoint(&x, &y, &z);
++             // end
++ 
++             if( aptr->label )   /* skip FormatLabel -- constant axes! */
++                 fprintf(OutFile,"(%s) %d %d Label\n",
++                             ((Label*)aptr->label)->label,x,y);
++         }
++ // end
+  }
+  
+  
+***************
+*** 1986,1991 ****
+--- 2282,2292 ----
+      register char *cptr;
+      register int dist;
+      char buffer[10];
++ 
++     // added by angel, icfd 20180315
++     // start
++     int x1, y1, z1;
++     // end
+   
+      buffer[9] = '\0';
+      buffer[6] = '.';
+***************
+*** 1997,2003 ****
+      {   s = ptr->src;
+          d = ptr->dst;
+  
+!         if( ZValid( (s->z+d->z)/2 ) && ZBack( (s->z+d->z)/2 ))
+          {   x = (s->x+d->x)/2;
+              y = (s->y+d->y)/2;
+   
+--- 2298,2305 ----
+      {   s = ptr->src;
+          d = ptr->dst;
+  
+!         z1 = (s->z+d->z)/2;
+!         if( ZValid( z1 ) && ZBack( z1 ))
+          {   x = (s->x+d->x)/2;
+              y = (s->y+d->y)/2;
+   
+***************
+*** 2022,2027 ****
+--- 2324,2336 ----
+                  cptr++;
+              } else *cptr = '0';
+   
++             // added by angel, icfd 20180315
++             // start
++             x1=x; y1=y;
++             FocusPoint(&x1, &y1, &z1);
++             x=x1; y=y1;
++             // end
++ 
+              fprintf(OutFile,"(%s) %d %d Label\n",cptr,x+4,y);
+          }
+      }
+***************
+*** 2051,2056 ****
+--- 2360,2375 ----
+                  !ClipVectBond(bptr->srcatom,bptr->dstatom)) )
+                      result++;
+  
++ // added by icfd 100723
++ // begin
++     /* stern */
++     if( DrawAxes )
++         ForEachAxis
++             if( bptr->flag&DrawBondFlag && (!UseClipping ||
++                 !ClipVectBond(bptr->srcatom,bptr->dstatom)) )
++                     result+=3;  /* bond + 2 end atoms */
++ // end
++ 
+      ForEachBack 
+          if( bptr->flag&DrawBondFlag && (!UseClipping ||
+              !ClipVectBond(bptr->srcatom,bptr->dstatom)) )
+***************
+*** 2081,2086 ****
+--- 2400,2691 ----
+      return result;
+  }
+  
++ // added by icfd 100723
++ // begin
++ /* stern */
++ static void CreateAxesAtoms( void )
++ {
++     register RAtom __far *aptr;
++     register Bond __far *bptr;
++     register int j;
++ 
++     /* define axes ends and BoundBox corners as "atoms" */
++     ForAllAxesAtoms
++     {
++         aptr->xorg = aptr->yorg = aptr->zorg = 0;       /* defer diversity */
++         aptr->flag = SphereFlag;
++         aptr->label = (Label *)0;
++         aptr->elemno = j;               /* abuse as ID to improve clipping */
++         aptr->radius = aptr->irad = 1;
++         aptr->mbox = 0;
++         //aptr->col = BoxCol;
++         aptr->col = (j < NUM_ORIGIN+NUM_AXES) ? AxesCol : BoxCol;  /*angel*/
++         aptr->anext = aptr + 1;
++     }
++     (--aptr)->anext = 0;                                /* terminate */
++ 
++     /* asssign axis ends */
++     MaxX += BoxSep;
++     MaxY += BoxSep;
++     MaxZ += BoxSep;
++ 
++     aptr = AxesAtoms + NUM_ORIGIN;
++     aptr->xorg =  MaxX; aptr->label = CreateLabel("+X", 2); aptr++;
++     aptr->xorg = -MaxX; aptr->label = CreateLabel("-X", 2); aptr++;
++     aptr->yorg =  MaxY; aptr->label = CreateLabel("+Y", 2); aptr++;
++     aptr->yorg = -MaxY; aptr->label = CreateLabel("-Y", 2); aptr++;
++     /* Z inverse */
++     aptr->zorg =  MaxZ; aptr->label = CreateLabel("-Z", 2); aptr++;
++     aptr->zorg = -MaxZ; aptr->label = CreateLabel("+Z", 2); aptr++;
++ 
++ #if 0
++     /* NUM_AXES1 -- if clipping is bad on big molecules, fragment axes
++      * Need more careful coding to make room and distinguish fragments!
++      */
++     aptr->xorg =  MaxX/2; aptr->label = CreateLabel("+X/2", 4); aptr++;
++     aptr->xorg = -MaxX/2; aptr->label = CreateLabel("-X/2", 4); aptr++;
++     ...
++     /* NUM_AXES */
++ #endif
++ 
++     /* assign vertices; note that z is kept inverse. */
++     aptr = AxesAtoms + NUM_ORIGIN + NUM_AXES;
++     (  aptr)->xorg = -MaxX; aptr->yorg = -MaxY; aptr->zorg =  MaxZ;
++     (++aptr)->xorg =  MaxX; aptr->yorg = -MaxY; aptr->zorg =  MaxZ;
++     (++aptr)->xorg =  MaxX; aptr->yorg =  MaxY; aptr->zorg =  MaxZ;
++     (++aptr)->xorg = -MaxX; aptr->yorg =  MaxY; aptr->zorg =  MaxZ;
++ 
++     (++aptr)->xorg = -MaxX; aptr->yorg = -MaxY; aptr->zorg = -MaxZ;
++     (++aptr)->xorg =  MaxX; aptr->yorg = -MaxY; aptr->zorg = -MaxZ;
++     (++aptr)->xorg =  MaxX; aptr->yorg =  MaxY; aptr->zorg = -MaxZ;
++     (++aptr)->xorg = -MaxX; aptr->yorg =  MaxY; aptr->zorg = -MaxZ;
++ 
++     // angel start
++     if(DrawUnitCell && *Info.spacegroup)
++     {
++ 	   int x, y, z;
++ 	   int xorg, yorg, zorg;
++ 	   int dxx, dxy, dxz;
++ 	   int dyx, dyy, dyz;
++ 	   int dzx, dzy, dzz;
++ 	   int a[3][3];
++ 	   Real lena, lenb, lenc;
++ 	   Real cosa, cosb, cosg;
++ 	   Real tmpx, tmpy, tmpz;
++        	   Real temp, sing;
++ 	   switch (tmpflag)
++ 	   {
++ 		case (1):
++ 	           lena = 250.0*Info.cella;
++         	   lenb = 250.0*Info.cellb;
++         	   lenc = 250.0*Info.cellc;
++ 
++         	   cosa = cos(Info.cellalpha);
++         	   cosb = cos(Info.cellbeta);
++         	   cosg = cos(Info.cellgamma);
++         	   sing = sin(Info.cellgamma);
++         
++         	   temp = cosa*cosa + cosb*cosb + cosg*cosg - 2.0*cosa*cosb*cosg;
++         	   tmpx = cosb;
++         	   tmpy = (cosa - cosb*cosg)/sing;
++         	   tmpz = -sqrt(1.0-temp)/sing;
++         
++         	   a[0][0] = (int)(lena);
++         	   a[0][1] = (int)(lenb*cosg);
++         	   a[0][2] = (int)(lenc*tmpx);
++         	   a[1][0] = (int)(0.0);
++         	   a[1][1] = (int)(lenb*ProperY(sing));
++         	   a[1][2] = (int)(lenc*ProperY(tmpy));
++         	   a[2][0] = (int)(0.0);
++         	   a[2][1] = (int)(0.0);
++         	   a[2][2] = (int)(lenc*tmpz);
++         	   /*
++         	   dxx = (int)(lena);
++         	   dyx = (int)(lenb*cosg);
++         	   dzx = (int)(lenc*tmpx);
++         	   dxy = (int)(0.0);
++         	   dyy = (int)(lenb*ProperY(sing));
++         	   dzy = (int)(lenc*ProperY(tmpy));
++         	   dxz = (int)(0.0);
++         	   dyz = (int)(0.0);
++         	   dzz = (int)(lenc*tmpz);
++         	   */
++ 
++         	   xorg = -(int)(OrigCX);
++         	   yorg = -(int)(OrigCY);
++         	   zorg = -(int)(OrigCZ);
++         	   break;
++ 
++ 		case (0):
++ 	           xorg = -(int)(OrigCX)+(int)(250.*Info.vecf2o[0]);
++         	   yorg = -(int)(OrigCY)+(int)(ProperY(250.*Info.vecf2o[1]));
++         	   zorg = -(int)(OrigCZ)-(int)(250.*Info.vecf2o[2]);
++         
++         	   a[0][0] = (int)(250.*Info.matf2o[0][0]);
++         	   a[0][1] = (int)(250.*Info.matf2o[0][1]);
++         	   a[0][2] = (int)(250.*Info.matf2o[0][2]);
++         	   a[1][0] = (int)(250.*ProperY(Info.matf2o[1][0]));
++         	   a[1][1] = (int)(250.*ProperY(Info.matf2o[1][1]));
++         	   a[1][2] = (int)(250.*ProperY(Info.matf2o[1][2]));
++         	   a[2][0] = (int)(-250.*Info.matf2o[2][0]);
++         	   a[2][1] = (int)(-250.*Info.matf2o[2][1]);
++         	   a[2][2] = (int)(-250.*Info.matf2o[2][2]);
++         	   /*
++         	   dxx = (int)(250.*Info.matf2o[0][0]);
++         	   dyx = (int)(250.*Info.matf2o[0][1]);
++         	   dzx = (int)(250.*Info.matf2o[0][2]);
++         	   dyx = (int)(250.*ProperY(Info.matf2o[1][0]));
++         	   dyy = (int)(250.*ProperY(Info.matf2o[1][1]));
++         	   dyz = (int)(250.*ProperY(Info.matf2o[1][2]));
++         	   dzx = (int)(-250.*Info.matf2o[2][0]);
++         	   dzy = (int)(-250.*Info.matf2o[2][1]);
++         	   dzz = (int)(-250.*Info.matf2o[2][2]);
++         	   */
++         	   break;
++         
++ 	  }
++ 
++           aptr = AxesAtoms + NUM_ORIGIN + NUM_AXES;
++ 
++           x=xorg - CenX; 
++           y=yorg - CenY; 
++           z=zorg - CenZ;
++           (  aptr)->xorg = x; aptr->yorg = y; aptr->zorg = z;
++           (++aptr)->xorg = x+a[0][0]; aptr->yorg = y+a[1][0]; aptr->zorg = z+a[2][0];
++           (++aptr)->xorg = x+a[0][0]+a[0][1]; aptr->yorg = y+a[1][0]+a[1][1]; aptr->zorg = z+a[2][0]+a[2][1];
++           (++aptr)->xorg = x+a[0][1]; aptr->yorg = y+a[1][1]; aptr->zorg = z+a[2][1];
++    
++           (++aptr)->xorg = x+a[0][2]; aptr->yorg = y+a[1][2]; aptr->zorg = z+a[2][2];
++           (++aptr)->xorg = x+a[0][0]+a[0][2]; aptr->yorg = y+a[1][0]+a[1][2]; aptr->zorg = z+a[2][0]+a[2][2];
++           (++aptr)->xorg = x+a[0][0]+a[0][1]+a[0][2]; aptr->yorg = y+a[1][0]+a[1][1]+a[1][2]; aptr->zorg = z+a[2][0]+a[2][1]+a[2][2];
++           (++aptr)->xorg = x+a[0][1]+a[0][2]; aptr->yorg = y+a[1][1]+a[1][2]; aptr->zorg = z+a[2][1]+a[2][2];
++ 	  /*
++           (  aptr)->xorg = x; aptr->yorg = y; aptr->zorg = z;
++           (++aptr)->xorg = x+dxx; aptr->yorg = y+dxy; aptr->zorg = z+dxz;
++           (++aptr)->xorg = x+dxx+dyx; aptr->yorg = y+dxy+dyy; aptr->zorg = z+dxz+dyz;
++           (++aptr)->xorg = x+dyx; aptr->yorg = y+dyy; aptr->zorg = z+dyz;
++    
++           (++aptr)->xorg = x+dzx; aptr->yorg = y+dzy; aptr->zorg = z+dzz;
++           (++aptr)->xorg = x+dxx+dzx; aptr->yorg = y+dxy+dzy; aptr->zorg = z+dxz+dzz;
++           (++aptr)->xorg = x+dxx+dyx+dzx; aptr->yorg = y+dxy+dyy+dzy; aptr->zorg = z+dxz+dyz+dzz;
++           (++aptr)->xorg = x+dyx+dzx; aptr->yorg = y+dyy+dzy; aptr->zorg = z+dyz+dzz;
++ 	  */
++ 
++     }
++     // angel end
++ 
++     MaxX -= BoxSep;
++     MaxY -= BoxSep;
++     MaxZ -= BoxSep;
++ 
++ #if 0
++     aptr = AxesAtoms + NUM_ORIGIN + NUM_AXES;
++     (  aptr)->label = CreateLabel("A", 1);
++     (++aptr)->label = CreateLabel("B", 1);
++     (++aptr)->label = CreateLabel("C", 1);
++     (++aptr)->label = CreateLabel("D", 1);
++     (++aptr)->label = CreateLabel("E", 1);
++     (++aptr)->label = CreateLabel("F", 1);
++     (++aptr)->label = CreateLabel("G", 1);
++     (++aptr)->label = CreateLabel("H", 1);
++ #endif
++ 
++     /* define axes as "bonds" */
++     /* keep in mind clipping problems! */
++     for (j = 0, bptr = AxesBonds; j < NUM_AXES + NUM_EDGES; ++j, ++bptr)
++     {
++         bptr->flag = j < NUM_AXES ? WireFlag : CylinderFlag;
++         bptr->radius =
++         bptr->irad = j < NUM_AXES ? 0 : BoxRad;
++         //bptr->col = BoxCol;
++         bptr->col = (j < NUM_AXES) ? AxesCol : BoxCol; /*angel*/
++         bptr->bnext = bptr + 1;
++     }
++     (--bptr)->bnext = 0;        /* terminate */
++ 
++     aptr = AxesAtoms;
++     bptr = AxesBonds;
++     bptr->srcatom = aptr + 0; bptr->dstatom = aptr + 1; bptr++;
++     bptr->srcatom = aptr + 0; bptr->dstatom = aptr + 2; bptr++;
++     bptr->srcatom = aptr + 0; bptr->dstatom = aptr + 3; bptr++;
++     bptr->srcatom = aptr + 0; bptr->dstatom = aptr + 4; bptr++;
++     bptr->srcatom = aptr + 0; bptr->dstatom = aptr + 5; bptr++;
++     bptr->srcatom = aptr + 0; bptr->dstatom = aptr + 6; bptr->bnext = 0;
++ 
++     /* define BoundBox as "bonds" */
++     aptr = AxesAtoms + NUM_ORIGIN + NUM_AXES;
++     bptr = AxesBonds + NUM_AXES;
++     bptr->srcatom = aptr + 0; bptr->dstatom = aptr + 1; bptr++;
++     bptr->srcatom = aptr + 1; bptr->dstatom = aptr + 2; bptr++;
++     bptr->srcatom = aptr + 2; bptr->dstatom = aptr + 3; bptr++;
++     bptr->srcatom = aptr + 3; bptr->dstatom = aptr + 0; bptr++;
++ 
++     bptr->srcatom = aptr + 4; bptr->dstatom = aptr + 5; bptr++;
++     bptr->srcatom = aptr + 5; bptr->dstatom = aptr + 6; bptr++;
++     bptr->srcatom = aptr + 6; bptr->dstatom = aptr + 7; bptr++;
++     bptr->srcatom = aptr + 7; bptr->dstatom = aptr + 4; bptr++;
++ 
++     bptr->srcatom = aptr + 0; bptr->dstatom = aptr + 4; bptr++;
++     bptr->srcatom = aptr + 1; bptr->dstatom = aptr + 5; bptr++;
++     bptr->srcatom = aptr + 2; bptr->dstatom = aptr + 6; bptr++;
++     bptr->srcatom = aptr + 3; bptr->dstatom = aptr + 7; bptr->bnext = 0;
++ 
++ }
++ // end
++ 
++ // added by icfd 100723
++ // begin
++ /* stern */
++ static void TransformAxesAtoms( void )
++ {
++     register RAtom __far *aptr;
++     register Bond __far *bptr;
++     register int j;
++ 
++     ForAllAxesAtoms
++     {
++         register Real xn, yn, zn, fn;
++         int x, y, z;
++ 
++         x = aptr->xorg; y = aptr->yorg; z = aptr->zorg;
++         xn = x*MatX[0]+y*MatX[1]+z*MatX[2];
++         yn = x*MatY[0]+y*MatY[1]+z*MatY[2];
++         zn = x*MatZ[0]+y*MatZ[1]+z*MatZ[2];
++         // modified by angel, icfd 20180315
++         // start
++         //fn = FocusScale(zn);
++         fn = 1.0f;
++         // end
++         aptr->x = (int) (xn * fn) + XOffset;
++         aptr->y = (int) (yn * fn) + YOffset;
++         aptr->z = (int) zn + ZOffset;
++     }
++ }
++ // end
++ 
++ // added by icfd 100723
++ // begin
++ /* stern */
++ static int FetchPSBoxItems( PSItemPtr __far *data, char __far *type )
++ {
++     register Bond __far *bptr;
++     register RAtom __far *aptr;
++     register int i,flag;
++ 
++     i = 0;
++     /* add boxes to vector output */
++     /* no fractional clipping of axes yet */
++     if( DrawBoundBox ||  DrawUnitCell )
++     {
++         ForEachBox
++             if(!UseClipping || !ClipVectBond(bptr->srcatom,bptr->dstatom) )
++             {   type[i] = PSBond;
++                 data[i++] = bptr;
++             }
++     }
++     return i;   /* small enough for int */
++ }
++ // end
+  
+  static void FetchPSItems( PSItemPtr __far *data, char __far *type )
+  {
+***************
+*** 2145,2151 ****
+--- 2750,2775 ----
+          {   type[i] = PSMonit;
+              data[i++] = mptr;
+          } 
++ 
++ // added by icfd 100723
++ // begin
++     /* "DrawAxesAtoms()", so to speak */
++     if( DrawAxes )
++     {
++         ForEachAxis
++             if(!UseClipping || !ClipVectBond(bptr->srcatom,bptr->dstatom) )
++             {   type[i] = PSBond;
++                 data[i++] = bptr;
++ 
++                 type[i] = PSAtom;
++                 data[i++] = bptr->srcatom;
++ 
++                 type[i] = PSAtom;
++                 data[i++] = bptr->dstatom;
++             }
++     }
+  }
++ // end
+  
+  
+  static void WritePSItems( PSItemPtr __far *data, char __far *type, int count )
+***************
+*** 2211,2216 ****
+--- 2835,2849 ----
+      PSItemPtr __far *data;
+      char __far *type;
+  
++ // added by icfd 100723
++ // begin
++     PSItemPtr Boxdata[NUM_EDGES];
++     char Boxtype[NUM_EDGES];
++ 
++     CreateAxesAtoms();
++     TransformAxesAtoms();
++ // end
++ 
+      count = CountPSItems();
+      if( !count ) return( True );
+  
+***************
+*** 2360,2370 ****
+--- 2993,3021 ----
+      VectSolid = True;
+      VectCol = 0;
+  
++ // added by icfd 100723
++ // begin
++     /* stern */
++     i = FetchPSBoxItems(Boxdata,Boxtype);
++     if( i > 0 )
++         DepthSort(Boxdata,Boxtype, i);
++     i -= 3;
++     if( i > 0 )
++         WritePSItems(Boxdata,Boxtype, i);       /* defer last three box lines */
++ // end
++ 
+      FetchPSItems(data,type);
+      if( count>1 )
+          DepthSort(data,type,(int)count);
+  
+      WritePSItems(data,type,(int)count);
++ 
++ // added by icfd 100723
++ // begin
++     /* stern */
++     if( i > 0 )
++         WritePSItems(Boxdata + i,Boxtype + i, 3);       /* deferred box */
++ // end
+   
+      if( !VectSolid )
+      {   fputs("[] 0 setdash\n",OutFile);
+***************
+*** 2378,2386 ****
+      if( LabelList )
+          WriteVectLabels();
+  
+!     fputs("newpath 0 0 moveto 0 ",OutFile);
+!     fprintf(OutFile,"%d rlineto %d 0 rlineto 0 %d",YRange,XRange,-YRange);
+!     fputs(" rlineto\nclosepath 0 setgray 1 setlinewidth stroke\n",OutFile);
+      fputs("end grestore\nshowpage\n",OutFile);
+      fputs("%%Trailer\n",OutFile);
+      fputs("%%EOF\n",OutFile);
+--- 3029,3039 ----
+      if( LabelList )
+          WriteVectLabels();
+  
+!     if(DrawPageFrame){ 
+! 	    fputs("newpath 0 0 moveto 0 ",OutFile); 
+! 	    fprintf(OutFile,"%d rlineto %d 0 rlineto 0 %d",YRange,XRange,-YRange); 
+! 	    fputs(" rlineto\nclosepath 0 setgray 1 setlinewidth stroke\n",OutFile);
+!     }
+      fputs("end grestore\nshowpage\n",OutFile);
+      fputs("%%Trailer\n",OutFile);
+      fputs("%%EOF\n",OutFile);
+Only in RasMol_2.7.2.1.1_20180920/src: outfile.c_org
+diff -cr RasMol_2.7.2.1.1/src/pixutils.c RasMol_2.7.2.1.1_20180920/src/pixutils.c
+*** RasMol_2.7.2.1.1/src/pixutils.c	2004-05-08 04:47:44.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/pixutils.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 270,275 ****
+--- 270,280 ----
+      register short __huge *dptr;
+      register Long offset;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x, &y, &z);
++     // end
++ 
+      /* SETPIXEL(dptr,fptr,z,Lut[col]); */
+  
+      offset = (Long)y*View.yskip+x;
+***************
+*** 288,293 ****
+--- 293,303 ----
+      register short __huge *dptr;
+      register Long offset;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x, &y, &z);
++     // end
++ 
+      if( XValid(x) && YValid(y) && ZValid(z) && ZBack(z) )
+      {   /* PlotPoint(x,y,z,col); */
+          offset = (Long)y*View.yskip+x;
+***************
+*** 308,313 ****
+--- 318,328 ----
+      register short __huge *dptr;
+      register int inten;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x, &y, &z);
++     // end
++ 
+      offset = (Long)y*View.yskip+x;
+      dptr = View.dbuf+offset;
+  
+***************
+*** 387,392 ****
+--- 402,412 ----
+      }
+      
+  
++     // added by angel, icfd 20180920
++     // start
++     //FocusPoint(&x1, &y1, &z1);
++     //FocusPoint(&x2, &y2, &z2);
++     // end
+      offset = (Long)y1*View.yskip + x1;
+      fptr = View.fbuf+offset;
+      dptr = View.dbuf+offset;
+***************
+*** 526,531 ****
+--- 546,556 ----
+      register int code1,code2;
+  
+  
++     // added by angel, icfd 20180920
++     // start
++     FocusPoint(&x1, &y1, &z1);
++     FocusPoint(&x2, &y2, &z2);
++     // end
+      if( col1!=col2 )
+      {   OutCode(code1,x1,y1,z1);
+          OutCode(code2,x2,y2,z2);
+***************
+*** 559,567 ****
+--- 584,599 ----
+      register int count;
+      register int altc;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x1, &y1, &z1);
++     FocusPoint(&x2, &y2, &z2);
++     // end
++ 
+      if( (x1==x2) && (y1==y2) )
+           return;
+  
++ 
+      /* Reject(OutCode(x1,y1,z1),OutCode(x2,y2,z2)) */
+      if( (x1<0) && (x2<0) ) return;
+      if( (y1<0) && (y2<0) ) return;
+***************
+*** 727,732 ****
+--- 759,770 ----
+        altc = AltlColours[((int)altl)&(AltlDepth-1)];
+      cola = altc;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x1, &y1, &z1);
++     FocusPoint(&x2, &y2, &z2);
++     // end
++     
+      offset = (Long)y1*View.yskip + x1;
+      fptr = View.fbuf+offset;
+      dptr = View.dbuf+offset;
+***************
+*** 963,968 ****
+--- 1001,1012 ----
+      if( (x1==x2) && (y1==y2) )
+           return;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x1, &y1, &z1);
++     FocusPoint(&x2, &y2, &z2);
++     // end
++ 
+      /* Reject(OutCode(x1,y1,z1),OutCode(x2,y2,z2)) */
+      if( (x1<0) && (x2<0) ) return;
+      if( (y1<0) && (y2<0) ) return;
+***************
+*** 1815,1820 ****
+--- 1859,1872 ----
+      p.v[3].z = src->pz-src->wz;
+      p.v[3].inten = src->vinten+col;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[0].x, &p.v[0].y, &p.v[0].z);
++     FocusPoint(&p.v[1].x, &p.v[1].y, &p.v[1].z);
++     FocusPoint(&p.v[2].x, &p.v[2].y, &p.v[2].z);
++     FocusPoint(&p.v[3].x, &p.v[3].y, &p.v[3].z);
++     // end
++ 
+      p.count = 4;
+      /* OutLinePolygon( &p ); */
+      ClipPolygon( &p );
+***************
+*** 1842,1847 ****
+--- 1894,1906 ----
+      p.v[2].y = dst->py+dst->wy;  
+      p.v[2].z = dst->pz+dst->wz;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[0].x, &p.v[0].y, &p.v[0].z);
++     FocusPoint(&p.v[1].x, &p.v[1].y, &p.v[1].z);
++     FocusPoint(&p.v[2].x, &p.v[2].y, &p.v[2].z);
++     // end
++ 
+  #ifdef INVERT
+      col = ( dst->wx*dy > dst->wy*dx )? col2 : col1;
+  #else
+***************
+*** 1858,1863 ****
+--- 1917,1927 ----
+      p.v[2].y = src->py-src->wy;  
+      p.v[2].z = src->pz-src->wz;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[2].x, &p.v[2].y, &p.v[2].z);
++     // end
++ 
+  #ifdef INVERT
+      col = ( src->wx*dy > src->wy*dx )? col2 : col1;
+  #else
+***************
+*** 1887,1922 ****
+--- 1951,2020 ----
+      p.v[0].x = src->px+src->wx+src->dx;  
+      p.v[0].y = src->py+src->wy+src->dy;  
+      p.v[0].z = src->pz+src->wz+src->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[0].x, &p.v[0].y, &p.v[0].z);
++     // end
+  
+      p.v[1].x = dst->px+dst->wx+dst->dx;  
+      p.v[1].y = dst->py+dst->wy+dst->dy;  
+      p.v[1].z = dst->pz+dst->wz+dst->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[1].x, &p.v[1].y, &p.v[1].z);
++     // end
+  
+      p.v[2].x = dst->px-dst->wx+dst->dx;
+      p.v[2].y = dst->py-dst->wy+dst->dy;  
+      p.v[2].z = dst->pz-dst->wz+dst->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[2].x, &p.v[2].y, &p.v[2].z);
++     // end
+  
+      p.v[3].x = src->px-src->wx+src->dx;  
+      p.v[3].y = src->py-src->wy+src->dy;  
+      p.v[3].z = src->pz-src->wz+src->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[3].x, &p.v[3].y, &p.v[3].z);
++     // end
++     
+      ClipPolygon( &p );
+  
+      /* Bottom Surface */
+      p.v[0].x = src->px+src->wx-src->dx;  
+      p.v[0].y = src->py+src->wy-src->dy;  
+      p.v[0].z = src->pz+src->wz-src->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[0].x, &p.v[0].y, &p.v[0].z);
++     // end
+  
+      p.v[1].x = dst->px+dst->wx-dst->dx;  
+      p.v[1].y = dst->py+dst->wy-dst->dy;  
+      p.v[1].z = dst->pz+dst->wz-dst->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[1].x, &p.v[1].y, &p.v[1].z);
++     // end
+  
+      p.v[2].x = dst->px-dst->wx-dst->dx;
+      p.v[2].y = dst->py-dst->wy-dst->dy;  
+      p.v[2].z = dst->pz-dst->wz-dst->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[2].x, &p.v[2].y, &p.v[2].z);
++     // end
+  
+      p.v[3].x = src->px-src->wx-src->dx;  
+      p.v[3].y = src->py-src->wy-src->dy;  
+      p.v[3].z = src->pz-src->wz-src->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[3].x, &p.v[3].y, &p.v[3].z);
++     // end
++     
+      ClipPolygon( &p );
+  
+      p.v[0].inten = src->hinten+col;
+***************
+*** 1928,1963 ****
+--- 2026,2095 ----
+      p.v[0].x = src->px+src->wx+src->dx;  
+      p.v[0].y = src->py+src->wy+src->dy;  
+      p.v[0].z = src->pz+src->wz+src->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[0].x, &p.v[0].y, &p.v[0].z);
++     // end
+  
+      p.v[1].x = dst->px+dst->wx+dst->dx;  
+      p.v[1].y = dst->py+dst->wy+dst->dy;  
+      p.v[1].z = dst->pz+dst->wz+dst->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[1].x, &p.v[1].y, &p.v[1].z);
++     // end
+  
+      p.v[2].x = dst->px+dst->wx-dst->dx;
+      p.v[2].y = dst->py+dst->wy-dst->dy;  
+      p.v[2].z = dst->pz+dst->wz-dst->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[2].x, &p.v[2].y, &p.v[2].z);
++     // end
+  
+      p.v[3].x = src->px+src->wx-src->dx;  
+      p.v[3].y = src->py+src->wy-src->dy;  
+      p.v[3].z = src->pz+src->wz-src->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[3].x, &p.v[3].y, &p.v[3].z);
++     // end
++     
+      ClipPolygon( &p );
+  
+      /* Right Surface */
+      p.v[0].x = src->px-src->wx+src->dx;  
+      p.v[0].y = src->py-src->wy+src->dy;  
+      p.v[0].z = src->pz-src->wz+src->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[0].x, &p.v[0].y, &p.v[0].z);
++     // end
+  
+      p.v[1].x = dst->px-dst->wx+dst->dx;  
+      p.v[1].y = dst->py-dst->wy+dst->dy;  
+      p.v[1].z = dst->pz-dst->wz+dst->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[1].x, &p.v[1].y, &p.v[1].z);
++     // end
+  
+      p.v[2].x = dst->px-dst->wx-dst->dx;
+      p.v[2].y = dst->py-dst->wy-dst->dy;  
+      p.v[2].z = dst->pz-dst->wz-dst->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[2].x, &p.v[2].y, &p.v[2].z);
++     // end
+  
+      p.v[3].x = src->px-src->wx-src->dx;  
+      p.v[3].y = src->py-src->wy-src->dy;  
+      p.v[3].z = src->pz-src->wz-src->dz;
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&p.v[3].x, &p.v[3].y, &p.v[3].z);
++     // end
++     
+      ClipPolygon( &p );
+  }
+  
+***************
+*** 2053,2058 ****
+--- 2185,2194 ----
+      /* Avoid Lookup Table Overflow! */
+      if( rad > MAXRAD ) rad = MAXRAD;
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x, &y, &z);
++     // end
+      offset = (Long)(y-rad)*View.yskip + x;
+      fold=View.fbuf+offset;  
+      dold=View.dbuf+offset;
+***************
+*** 2274,2279 ****
+--- 2410,2421 ----
+      if (altl != '\0' && altl != ' ')
+        altc = AltlColours[((int)altl)&(AltlDepth-1)];
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x1, &y1, &z1);
++     FocusPoint(&x2, &y2, &z2);
++     // end
++ 
+      lx = x2-x1;
+      ly = y2-y1;
+  
+***************
+*** 2375,2380 ****
+--- 2517,2523 ----
+          return;
+      }
+  
++ 
+      if( z1<z2 )
+      {   tmp=x1; x1=x2; x2=tmp;
+          tmp=y1; y1=y2; y2=tmp;
+***************
+*** 2394,2399 ****
+--- 2537,2548 ----
+      else { ax = -lx; ix = -1; }
+      zrate = lz/MaxFun(ax,ay);
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x1, &y1, &z1);
++     FocusPoint(&x2, &y2, &z2);
++     // end
++ 
+      temp = (Long)y1*View.yskip+x1;
+      fbase = View.fbuf+temp;
+      dbase = View.dbuf+temp;
+***************
+*** 2634,2639 ****
+--- 2783,2789 ----
+          return;
+      }
+  
++ 
+      if( z1<z2 )
+      {   tmp=x1; x1=x2; x2=tmp;
+          tmp=y1; y1=y2; y2=tmp;
+***************
+*** 2653,2658 ****
+--- 2803,2814 ----
+      else { ax = -lx; ix = -1; }
+      zrate = lz/MaxFun(ax,ay);
+  
++     // added by angel, icfd 20180219
++     // start
++     FocusPoint(&x1, &y1, &z1);
++     FocusPoint(&x2, &y2, &z2);
++     // end
++ 
+      temp = (Long)y1*View.yskip+x1;
+      fbase = View.fbuf+temp;
+      dbase = View.dbuf+temp;
+Only in RasMol_2.7.2.1.1_20180920/src: rasmol
+diff -cr RasMol_2.7.2.1.1/src/rasmol.c RasMol_2.7.2.1.1_20180920/src/rasmol.c
+*** RasMol_2.7.2.1.1/src/rasmol.c	2004-05-08 04:47:49.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/rasmol.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 1084,1090 ****
+--- 1084,1092 ----
+  
+      if( ReDrawFlag )
+      {   if( ReDrawFlag & RFReSize )
++ 	{
+              ReSizeScreen();
++ 	}
+  
+          if( ReDrawFlag & RFColour )
+          {   if( Interactive ) 
+***************
+*** 1342,1348 ****
+  }
+  
+  
+! #define FORMATOPTMAX   15
+  static struct {
+          char *ident;
+          int format;
+--- 1344,1351 ----
+  }
+  
+  
+! //#define FORMATOPTMAX   15
+! #define FORMATOPTMAX   16  //angel
+  static struct {
+          char *ident;
+          int format;
+***************
+*** 1360,1365 ****
+--- 1363,1369 ----
+              { "mopac",      FormatMOPAC    },
+              { "nmrpdb",     FormatNMRPDB   },
+              { "pdb",        FormatPDB      },
++             { "gro",        FormatGRO      },
+              { "shelx",      FormatSHELX    },
+              { "xyz",        FormatXYZ      }
+                                  };
+***************
+*** 1444,1449 ****
+--- 1448,1454 ----
+              if( !FileNamePtr )
+              {   FileNamePtr = ptr;
+              } else DisplayUsage();
++ 
+      }
+  }
+  
+diff -cr RasMol_2.7.2.1.1/src/rasmol.h RasMol_2.7.2.1.1_20180920/src/rasmol.h
+*** RasMol_2.7.2.1.1/src/rasmol.h	2004-02-15 12:08:03.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/rasmol.h	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 87,92 ****
+--- 87,96 ----
+  #define TERMIOS
+  #define PROFILE
+  #define MITSHM
++ //angel start
++ #define WITHOUT_BOXCLIPTWINLINE
++ #define WITHOUT_CHECK_FOCUS_VALUE
++ //angel end
+  
+  /* #define HAVEZLIB     */
+  /* #define HAVELIBJPEG  */
+***************
+*** 115,120 ****
+--- 119,125 ----
+  #undef SIXTEENBIT
+  #endif
+  
++ 
+  #if !defined(EIGHTBIT) && !defined(THIRTYTWOBIT) && !defined(SIXTEENBIT)
+  #define EIGHTBIT
+  #endif
+Only in RasMol_2.7.2.1.1_20180920/src: rasmol._man
+diff -cr RasMol_2.7.2.1.1/src/rastxt.c RasMol_2.7.2.1.1_20180920/src/rastxt.c
+*** RasMol_2.7.2.1.1/src/rastxt.c	2004-01-27 09:00:34.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/rastxt.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 507,513 ****
+  }
+  
+  
+! #define FORMATOPTMAX   15
+  static struct {
+          char *ident;
+          int format;
+--- 507,514 ----
+  }
+  
+  
+! //#define FORMATOPTMAX   15
+! #define FORMATOPTMAX   16    //angel
+  static struct {
+          char *ident;
+          int format;
+***************
+*** 525,530 ****
+--- 526,532 ----
+              { "mopac",      FormatMOPAC    },
+              { "nmrpdb",     FormatNMRPDB   },
+              { "pdb",        FormatPDB      },
++             { "gro",        FormatGRO      },
+              { "shelx",      FormatSHELX    },
+              { "xyz",        FormatXYZ      }
+                                  };
+diff -cr RasMol_2.7.2.1.1/src/raswin.c RasMol_2.7.2.1.1_20180920/src/raswin.c
+*** RasMol_2.7.2.1.1/src/raswin.c	2004-05-08 04:47:55.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/raswin.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 2944,2950 ****
+  }
+  
+  
+! #define FORMATOPTMAX   15
+  static struct {
+          char *ident;
+          int format;
+--- 2944,2951 ----
+  }
+  
+  
+! //#define FORMATOPTMAX   15
+! #define FORMATOPTMAX   16   //angel
+  static struct {
+          char *ident;
+          int format;
+***************
+*** 2963,2968 ****
+--- 2964,2970 ----
+              { "mopac",      FormatMOPAC,     5 },
+              { "nmrpdb",     FormatNMRPDB,    6 },
+              { "pdb",        FormatPDB,       3 },
++             { "gro",        FormatGRO,       3 },
+              { "shelx",      FormatSHELX,     5 },
+              { "xyz",        FormatXYZ,       3 }
+                                  };
+diff -cr RasMol_2.7.2.1.1/src/render.c RasMol_2.7.2.1.1_20180920/src/render.c
+*** RasMol_2.7.2.1.1/src/render.c	2004-05-08 04:47:57.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/render.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 498,504 ****
+      {   orig = MaxZoom;
+          /* Code should match InitialTransform() */
+          /* MaxZoom*DScale*Range*750 == 252      */
+! 	    MaxZoom = 0.336*WorldSize/Range;
+  	    ZoomRange = Range;  MaxZoom -= 1.0;
+  
+  	    /* Handle Change in MaxZoom */
+--- 498,511 ----
+      {   orig = MaxZoom;
+          /* Code should match InitialTransform() */
+          /* MaxZoom*DScale*Range*750 == 252      */
+! 	    //MaxZoom = 0.336*WorldSize/Range;
+! 	    MaxZoom = 0.136*WorldSize/Range;
+! // added by icfd 100727
+! // begin
+!         MinFocus = MaxZoom * Range/(ZOffset ? ZOffset : 10000) * 0.5
+!                     + 0.001 * MaxZoom * MaxZoom;
+!         if (Focus && Focus < MinFocus) Focus = MinFocus;
+! // end
+  	    ZoomRange = Range;  MaxZoom -= 1.0;
+  
+  	    /* Handle Change in MaxZoom */
+***************
+*** 617,622 ****
+--- 624,647 ----
+      HashTable[ref] = (void __far*)datum;
+  }
+  
++ //angel start
++ void BoxClipTwinLine( int x1, int y1, int z1,
++ 		      int x2, int y2, int z2,
++ 		      int col1, int col2, char altl)
++ {
++         //commented out by angel, icfd 20180219
++         //start
++ 	//FocusPoint(&x1, &y1, &z1);
++ 	//FocusPoint(&x2, &y2, &z2);
++         //end
++ #ifdef WITHOUT_BOXCLIPTWINLINE
++ 	ClipTwinLine(x1,y1,z1,x2,y2,z2,col1,col2,altl);
++ #else
++ 	ClipCylinder(x1,y1,z1,x2,y2,z2,col1,col2,(int)(Scale*BoxRad));
++ #endif
++ }
++ //angel end
++ 
+  
+  void ResetVoxelData( void )
+  {
+***************
+*** 974,979 ****
+--- 999,1005 ----
+      register RAtom __far *s;
+      register RAtom __far *d;
+      register int sc,dc;
++     char buffer[80];
+  
+      if( UseClipping )
+      {   ForEachBond
+***************
+*** 994,1000 ****
+--- 1020,1030 ----
+                 } else /* bptr->flag & DashFlag */
+                     ClipDashVector(s->x,s->y,s->z,d->x,d->y,d->z,sc,dc,bptr->altl);
+  	   }
++ 
++ 	//sprintf(buffer,"Clipping:  XOffset=%d, YOffset=%d, ZOffset=%d\n",XOffset, YOffset, ZOffset);
++ 	//WriteString(buffer);
+      } else
++     {
+  	ForEachBond
+  	   if( bptr->flag & DrawBondFlag )
+             {   s = bptr->srcatom; d = bptr->dstatom;
+***************
+*** 1014,1019 ****
+--- 1044,1053 ----
+  	       } else ClipDashVector(s->x,s->y,s->z,d->x,d->y,d->z,sc,dc,
+                          bptr->altl);
+             }
++ 
++ 	//WriteString("HEREEEEEEEEEEEEEEEEEEEEEE");
++     }
++ 
+  }
+  
+  
+***************
+*** 1181,1187 ****
+  }
+  
+  
+- 
+  static void DisplayBoxes( void )
+  {
+      register Real lena, lenb, lenc;
+--- 1215,1220 ----
+***************
+*** 1194,1200 ****
+      register int dxx,dxy,dxz;
+      register int dyx,dyy,dyz;
+      register int dzx,dzy,dzz;
+!     register int x, y, z;
+  
+      Cenx=(int)(CenX*MatX[0]+CenY*MatX[1]+CenZ*MatX[2]);
+  	Ceny=(int)(CenX*MatY[0]+CenY*MatY[1]+CenZ*MatY[2]);
+--- 1227,1233 ----
+      register int dxx,dxy,dxz;
+      register int dyx,dyy,dyz;
+      register int dzx,dzy,dzz;
+!     int x, y, z;
+  
+      Cenx=(int)(CenX*MatX[0]+CenY*MatX[1]+CenZ*MatX[2]);
+  	Ceny=(int)(CenX*MatY[0]+CenY*MatY[1]+CenZ*MatY[2]);
+***************
+*** 1216,1240 ****
+  	if( DrawAxes )
+  	{   /* Line (MinX,0,0) to (MaxX,0,0) */
+              x = XOffset+dxx;  y = YOffset+dxy;  z = ZOffset+dxz;
+!             if( ZValid(z) && ZBack(z) ) DisplayRasString(x+2,y,z,
+!               (unsigned char *)"X",BoxCol);
+  	    ClipTwinLine(XOffset-dxx,YOffset-dxy,ZOffset-dxz,
+!                          x,y,z,BoxCol,BoxCol,' ');
+  
+  	    /* Line (0,MinY,0) to (0,MaxY,0) */
+              x = XOffset+dyx;  y = YOffset+dyy;  z = ZOffset+dyz;
+!             if( ZValid(z) && ZBack(z) ) DisplayRasString(x+2,y,z,
+!               (unsigned char *)"Y",BoxCol);
+  	    ClipTwinLine(XOffset-dyx,YOffset-dyy,ZOffset-dyz, 
+! 			 x,y,z,BoxCol,BoxCol,' ');
+  
+  
+  	    /* Line (0,0,MinZ) to (0,0,MaxZ) */
+              x = XOffset-dzx;  y = YOffset-dzy;  z = ZOffset-dzz;
+              if( ZValid(z) && ZBack(z) ) DisplayRasString(x+2,y,z,
+!               (unsigned char *)"Z",BoxCol);
+! 	    ClipTwinLine(XOffset+dzx,YOffset+dzy,ZOffset+dzz, 
+! 			 x,y,z,BoxCol,BoxCol,' ');
+  
+  	}
+  
+--- 1249,1282 ----
+  	if( DrawAxes )
+  	{   /* Line (MinX,0,0) to (MaxX,0,0) */
+              x = XOffset+dxx;  y = YOffset+dxy;  z = ZOffset+dxz;
+! 	    //angel start: ClipTwinLine --> BoxClipTwinLine, include FocusPoint, AxesCol
+  	    ClipTwinLine(XOffset-dxx,YOffset-dxy,ZOffset-dxz,
+!                          x,y,z,AxesCol,AxesCol,' '); 
+!             FocusPoint(&x, &y, &z);
+! 	    //angel end
+!                 if( ZValid(z) && ZBack(z) ) DisplayRasString(x+2,y,z,
+!                   (unsigned char *)"X",AxesCol);
+  
+  	    /* Line (0,MinY,0) to (0,MaxY,0) */
+              x = XOffset+dyx;  y = YOffset+dyy;  z = ZOffset+dyz;
+! 	    //angel start: ClipTwinLine --> BoxClipTwinLine, include FocusPoint
+  	    ClipTwinLine(XOffset-dyx,YOffset-dyy,ZOffset-dyz, 
+! 			 x,y,z,AxesCol,AxesCol,' ');
+! 	    FocusPoint(&x, &y, &z);
+! 	    //angel end
+!             if( ZValid(z) && ZBack(z) ) DisplayRasString(x+2,y,z,
+!               (unsigned char *)"Y",AxesCol);
+  
+  
+  	    /* Line (0,0,MinZ) to (0,0,MaxZ) */
+              x = XOffset-dzx;  y = YOffset-dzy;  z = ZOffset-dzz;
++ 	    //angel start: ClipTwinLine --> BoxClipTwinLine, include FocusPoint
++ 	    BoxClipTwinLine(XOffset+dzx,YOffset+dzy,ZOffset+dzz, 
++ 			 x,y,z,AxesCol,AxesCol,' ');
++ 	    FocusPoint(&x, &y, &z);
++ 	    //angel end
+              if( ZValid(z) && ZBack(z) ) DisplayRasString(x+2,y,z,
+!               (unsigned char *)"Z",AxesCol);
+  
+  	}
+  
+***************
+*** 1295,1300 ****
+--- 1337,1343 ----
+      {   /* Calculate Unit Cell! */
+        if (det(Info.matf2o) < 1.1 )
+        {
++ 	tmpflag = 1;
+  	lena = 250.0*Info.cella;
+  	lenb = 250.0*Info.cellb;
+  	lenc = 250.0*Info.cellc;
+***************
+*** 1330,1335 ****
+--- 1373,1379 ----
+          double cellmat[3][3];
+          int ii;
+  
++ 	tmpflag = 0;
+          for (ii = 0; ii < 3; ii++) {
+            cellmat[0][ii] = MatX[0]*Info.matf2o[0][ii] + 
+              ProperY(MatX[1]*Info.matf2o[1][ii]) - MatX[2]*Info.matf2o[2][ii];
+***************
+*** 1372,1401 ****
+  		x = xorg - Cenx;
+  		y = yorg - Ceny;
+  		z = zorg - Cenz;
+! 		ClipTwinLine(x,y,z,x+dxx,y+dxy,z+dxz,BoxCol,BoxCol,' ');
+! 		ClipTwinLine(x,y,z,x+dyx,y+dyy,z+dyz,BoxCol,BoxCol,' ');
+! 		ClipTwinLine(x,y,z,x+dzx,y+dzy,z+dzz,BoxCol,BoxCol,' ');
+  
+  		x = xorg - Cenx + dxx + dyx;
+  		y = yorg - Ceny + dxy + dyy;
+  		z = zorg - Cenz + dxz + dyz;
+! 		ClipTwinLine(x,y,z,x-dxx,y-dxy,z-dxz,BoxCol,BoxCol,' ');
+! 		ClipTwinLine(x,y,z,x-dyx,y-dyy,z-dyz,BoxCol,BoxCol,' ');
+! 		ClipTwinLine(x,y,z,x+dzx,y+dzy,z+dzz,BoxCol,BoxCol,' ');
+  
+  		x = xorg - Cenx + dxx + dzx;
+  		y = yorg - Ceny + dxy + dzy;
+! 		z = zorg - Cenz + dxz + dyz;
+! 		ClipTwinLine(x,y,z,x-dxx,y-dxy,z-dxz,BoxCol,BoxCol,' ');
+! 		ClipTwinLine(x,y,z,x+dyx,y+dyy,z+dyz,BoxCol,BoxCol,' ');
+! 		ClipTwinLine(x,y,z,x-dzx,y-dzy,z-dzz,BoxCol,BoxCol,' ');
+  
+  		x = xorg - Cenx + dyx + dzx;
+  		y = yorg - Ceny + dyy + dzy;
+  		z = zorg - Cenz + dyz + dzz;
+! 		ClipTwinLine(x,y,z,x+dxx,y+dxy,z+dxz,BoxCol,BoxCol,' ');
+! 		ClipTwinLine(x,y,z,x-dyx,y-dyy,z-dyz,BoxCol,BoxCol,' ');
+! 		ClipTwinLine(x,y,z,x-dzx,y-dzy,z-dzz,BoxCol,BoxCol,' ');
+      }
+  }
+  
+--- 1416,1446 ----
+  		x = xorg - Cenx;
+  		y = yorg - Ceny;
+  		z = zorg - Cenz;
+! 		BoxClipTwinLine(x,y,z,x+dxx,y+dxy,z+dxz,BoxCol,BoxCol,' ');
+! 		BoxClipTwinLine(x,y,z,x+dyx,y+dyy,z+dyz,BoxCol,BoxCol,' ');
+! 		BoxClipTwinLine(x,y,z,x+dzx,y+dzy,z+dzz,BoxCol,BoxCol,' ');
+  
+  		x = xorg - Cenx + dxx + dyx;
+  		y = yorg - Ceny + dxy + dyy;
+  		z = zorg - Cenz + dxz + dyz;
+! 		BoxClipTwinLine(x,y,z,x-dxx,y-dxy,z-dxz,BoxCol,BoxCol,' ');
+! 		BoxClipTwinLine(x,y,z,x-dyx,y-dyy,z-dyz,BoxCol,BoxCol,' ');
+! 		BoxClipTwinLine(x,y,z,x+dzx,y+dzy,z+dzz,BoxCol,BoxCol,' ');
+  
+  		x = xorg - Cenx + dxx + dzx;
+  		y = yorg - Ceny + dxy + dzy;
+! 		//z = zorg - Cenz + dxz + dyz;
+! 		z = zorg - Cenz + dxz + dzz;
+! 		BoxClipTwinLine(x,y,z,x-dxx,y-dxy,z-dxz,BoxCol,BoxCol,' ');
+! 		BoxClipTwinLine(x,y,z,x+dyx,y+dyy,z+dyz,BoxCol,BoxCol,' ');
+! 		BoxClipTwinLine(x,y,z,x-dzx,y-dzy,z-dzz,BoxCol,BoxCol,' ');
+  
+  		x = xorg - Cenx + dyx + dzx;
+  		y = yorg - Ceny + dyy + dzy;
+  		z = zorg - Cenz + dyz + dzz;
+! 		BoxClipTwinLine(x,y,z,x+dxx,y+dxy,z+dxz,BoxCol,BoxCol,' ');
+! 		BoxClipTwinLine(x,y,z,x-dyx,y-dyy,z-dyz,BoxCol,BoxCol,' ');
+! 		BoxClipTwinLine(x,y,z,x-dzx,y-dzy,z-dzz,BoxCol,BoxCol,' ');
+      }
+  }
+  
+diff -cr RasMol_2.7.2.1.1/src/render.h RasMol_2.7.2.1.1_20180920/src/render.h
+*** RasMol_2.7.2.1.1/src/render.h	2004-05-08 04:49:01.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/render.h	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 168,173 ****
+--- 168,176 ----
+  int DrawBoundBox,DrawAxes;
+  int DrawDoubleBonds;
+  int DrawUnitCell;
++ //angel start
++ int tmpflag;
++ //angel end
+  
+  Real IVoxRatio;
+  int VoxelsClean;
+***************
+*** 209,214 ****
+--- 212,220 ----
+  extern int DrawBoundBox,DrawAxes;
+  extern int DrawDoubleBonds;
+  extern int DrawUnitCell;
++ //angel start
++ extern int tmpflag;
++ //angel end
+  
+  extern Real IVoxRatio;
+  extern int VoxelsClean;
+diff -cr RasMol_2.7.2.1.1/src/script.c RasMol_2.7.2.1.1_20180920/src/script.c
+*** RasMol_2.7.2.1.1/src/script.c	2004-05-08 04:48:02.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/script.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 1229,1234 ****
+--- 1229,1241 ----
+          } else temp = (int)(100*MaxZoom*DialValue[DialZoom]);
+          fprintf(OutFile,"zoom %d\n",temp+100);
+      }
++ // added by icfd 100726
++ // begin
++     temp = (int)(100.0*Focus+0.5);
++     if( temp )
++     {   fprintf(OutFile,"focus %d\n",temp);
++     } else fputs("focus off\n",OutFile);
++ // end 
+      putc('\n',OutFile);
+  
+      if ( CenX || CenY || CenZ ) {
+***************
+*** 1240,1247 ****
+      }
+  
+      /* Rendering */
+!     if( DrawAxes || DrawBoundBox || DrawUnitCell )
+!         fprintf(OutFile,"colour axes [%d,%d,%d]\n",BoxR,BoxG,BoxB);
+      if( DrawBonds )
+          fprintf(OutFile,"set bonds %s\n", DrawDoubleBonds? "on":"off" );
+  
+--- 1247,1260 ----
+      }
+  
+      /* Rendering */
+!     //if( DrawAxes || DrawBoundBox || DrawUnitCell )
+!     //    fprintf(OutFile,"colour axes [%d,%d,%d]\n",BoxR,BoxG,BoxB);
+! 
+!     // angel modification
+!     if( DrawAxes )
+!         fprintf(OutFile,"colour axes [%d,%d,%d]\n",AxesR,AxesG,AxesB);
+!     if( DrawBoundBox || DrawUnitCell )
+!         fprintf(OutFile,"colour box [%d,%d,%d]\n",BoxR,BoxG,BoxB);
+      if( DrawBonds )
+          fprintf(OutFile,"set bonds %s\n", DrawDoubleBonds? "on":"off" );
+  
+***************
+*** 1681,1687 ****
+  
+      dx = MaxX/250.0;  dy = MaxY/250.0;  dz = MaxZ/250.0;
+      cx = OrigCX/250.0; cy = OrigCY/250.0; cz = OrigCZ/250.0;
+!     MageCol = FindKinemageCol( BoxR, BoxG, BoxB );
+  
+      if( DrawAxes || KinemageFlag )
+      {   fputs("@group {coord axes} dominant",OutFile);
+--- 1694,1702 ----
+  
+      dx = MaxX/250.0;  dy = MaxY/250.0;  dz = MaxZ/250.0;
+      cx = OrigCX/250.0; cy = OrigCY/250.0; cz = OrigCZ/250.0;
+! 
+!     // angel modification
+!     MageCol = FindKinemageCol( AxesR, AxesG, AxesB );
+  
+      if( DrawAxes || KinemageFlag )
+      {   fputs("@group {coord axes} dominant",OutFile);
+***************
+*** 1692,1697 ****
+--- 1707,1715 ----
+          fprintf(OutFile,"{} P 0 %g 0\n{} L 0 %g 0\n",-dy+cy,dy+cy);
+          fprintf(OutFile,"{} P 0 0 %g\n{} L 0 0 %g\n",-dz+cz,dz+cz);
+      }
++     // angel end
++ 
++     MageCol = FindKinemageCol( BoxR, BoxG, BoxB );
+  
+      if( DrawBoundBox || KinemageFlag )
+      {   fputs("@group {bound box} dominant",OutFile);
+diff -cr RasMol_2.7.2.1.1/src/tokens.c RasMol_2.7.2.1.1_20180920/src/tokens.c
+*** RasMol_2.7.2.1.1/src/tokens.c	2004-05-08 04:48:08.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/tokens.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 628,633 ****
+--- 628,638 ----
+                          return( FontSizeTok );
+                      } else if( !strcmp(ptr,"NTSTROKE") ) {
+                          return( FontStrokeTok );
++ // added by icfd 100727
++ // begin
++                     } else if( !strcmp(ptr,"CUS")) {
++                         return( FocusTok );
++ // end
+                      }
+                      break;
+                  
+***************
+*** 657,662 ****
+--- 662,668 ----
+          GREENBLUE            GreenBlueTok
+          GREENTINT            GreenTintTok
+          GREY                 GrayTok
++         GRO                  GROTok     //angel 
+          GROUP                GroupTok
+          GRUPO                GroupTok
+          GRUPPO               GroupTok 
+***************
+*** 699,704 ****
+--- 705,713 ----
+                          return( GroupTok );
+                       } else if( !strcmp(ptr,"UPPO") ) {
+                          return( GroupTok );
++                      } else if( !strcmp(ptr,"O") ) {  //angel start
++                         WriteString("I'm supposed to be here");             //angel end
++                         return( GROTok );             //angel end
+                     }
+                      break;
+  
+***************
+*** 1178,1187 ****
+                      break;
+  
+                  case('S'):
+!                     if( !*ptr ) {
+                          return( EPSFTok );
+                      }
+                      break;
+  
+                  case('U'):
+                      if( !strcmp(ptr,"RINE") ) {
+--- 1187,1200 ----
+                      break;
+  
+                  case('S'):
+! //angel start modification
+! 		    if( !*ptr ) {
+                          return( EPSFTok );
++ 		    } else if( !strcmp(ptr,"PAGEFRAME") ) {
++                         return( PSPageFrameTok );
+                      }
+                      break;
++ //angel end modification
+  
+                  case('U'):
+                      if( !strcmp(ptr,"RINE") ) {
+diff -cr RasMol_2.7.2.1.1/src/tokens.h RasMol_2.7.2.1.1_20180920/src/tokens.h
+*** RasMol_2.7.2.1.1/src/tokens.h	2004-05-08 04:49:11.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/tokens.h	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 158,163 ****
+--- 158,171 ----
+  #define ZapTok         308
+  #define ZoomTok        309
+  
++ // added by icfd 100727
++ // begin
++ #define FocusTok       520
++ // end
++ //angel start
++ #define PSPageFrameTok 521
++ //angel end
++ 
+  /* Predicate Tokens */
+  #define IsPredTok(x)   (((x)>=310) && ((x)<=349))
+  #define PredTokOrd(x)  ((x)-310)
+***************
+*** 218,224 ****
+  
+  /* File Format Tokens */
+  /* Warning! Tokens are related to Format values */
+! #define IsMoleculeToken(x)  (((x)>=360) && ((x)<=375))
+  
+  #define PDBTok         360
+  #define MacroModelTok  361
+--- 226,233 ----
+  
+  /* File Format Tokens */
+  /* Warning! Tokens are related to Format values */
+! //#define IsMoleculeToken(x)  (((x)>=360) && ((x)<=375))
+! #define IsMoleculeToken(x)  (((x)>=360) && ((x)<=376))  //angel mod
+  
+  #define PDBTok         360
+  #define MacroModelTok  361
+***************
+*** 236,241 ****
+--- 245,251 ----
+  #define XYZTok         373
+  #define CIFTok         374
+  #define CEXTok         375
++ #define GROTok         376
+  
+  /* Raster Tokens */
+  #define IsImageToken(x) (((((x)>=380) && ((x)<=398)) || ((x) == PhiPsiTok)))
+diff -cr RasMol_2.7.2.1.1/src/transfor.c RasMol_2.7.2.1.1_20180920/src/transfor.c
+*** RasMol_2.7.2.1.1/src/transfor.c	2004-05-08 04:48:10.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/transfor.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 137,143 ****
+  #include "vector.h"   /* [GSG 11/14/95] */
+  #include "wbrotate.h" /* [GSG 11/14/95] */
+  
+- 
+  #define CPKMAX  16
+  static ShadeRef CPKShade[] = {
+       { 0, 0, 200, 200, 200 },       /*  0 Light Grey   */
+--- 137,142 ----
+***************
+*** 259,265 ****
+  static int MaskColour[MAXMASK];
+  static int MaskShade[MAXMASK];
+  
+- 
+  void DetermineClipping( void )
+  {
+      register int temp;
+--- 258,263 ----
+***************
+*** 327,332 ****
+--- 325,334 ----
+          DetermineClipping();
+          VoxelsClean = False;
+          BucketFlag = False;
++ // added by icfd 100726
++ // begin
++         if( Focus > 0 ) ReDrawFlag |= RFMagnify;
++ // end
+      }
+  }
+  
+***************
+*** 383,388 ****
+--- 385,394 ----
+          DetermineClipping();
+          VoxelsClean = False;
+          BucketFlag = False;
++ // added by icfd 100726
++ // begin
++         if( Focus > 0 ) ReDrawFlag |= RFMagnify;
++ // end
+      }
+  }
+  
+***************
+*** 437,442 ****
+--- 443,452 ----
+          DetermineClipping();
+          VoxelsClean = False;
+          BucketFlag = False;
++ // added by icfd 100726
++ // begin
++         if( Focus > 0 ) ReDrawFlag |= RFMagnify;
++ // end
+      }
+  }
+  
+***************
+*** 1497,1502 ****
+--- 1507,1513 ----
+      {   SetLutEntry(BackCol,BackR,BackG,BackB);
+          SetLutEntry(LabelCol,LabR,LabG,LabB);
+          SetLutEntry(BoxCol,BoxR,BoxG,BoxB);
++         SetLutEntry(AxesCol,AxesR,AxesG,AxesB);  /*angel*/
+      } else SetLutEntry(BackCol,80,80,80);
+  
+      diffuse = 1.0 - Ambient;
+***************
+*** 1580,1585 ****
+--- 1591,1597 ----
+  
+      BackR = BackG = BackB = 0;
+      BoxR = BoxG = BoxB = 255;
++     AxesR = AxesG = AxesB = 255;  /*angel*/
+      LabR = LabG = LabB = 255;
+  	DotR = DotG = DotB = 255;
+  	UseDotColPot = False;
+***************
+*** 2667,2678 ****
+  
+        /* Code should match ReSizeScreen() */
+        /* MaxZoom*DScale*Range*750 == 252  */
+!       MaxZoom = 0.336*WorldSize/Range;
+        if( MaxZoom < 1.0 )
+        {   DScale *= MaxZoom;
+            MaxZoom = 1.0;
+        }
+        ZoomRange = Range;
+        MaxZoom -= 1.0;
+      }
+  }
+--- 2679,2705 ----
+  
+        /* Code should match ReSizeScreen() */
+        /* MaxZoom*DScale*Range*750 == 252  */
+!       //MaxZoom = 0.336*WorldSize/Range;
+!       MaxZoom = 0.136*WorldSize/Range;
+        if( MaxZoom < 1.0 )
+        {   DScale *= MaxZoom;
+            MaxZoom = 1.0;
+        }
+        ZoomRange = Range;
++ // added by icfd 100726
++ // begin
++     MinFocus = MaxZoom * Range/(ZOffset ? ZOffset : 10000) * 0.5
++                 + 0.001 * MaxZoom * MaxZoom;
++     Focus = 0;
++     MinBoxSep = -Offset * 0.6;
++     MaxBoxSep = Offset * 0.6;
++     BoxRad = 3;
++ // end
++ 
++ // added by icfd 100723
++ // begin
++       BoxSep = 0;
++ // end
+        MaxZoom -= 1.0;
+      }
+  }
+***************
+*** 2698,2703 ****
+--- 2725,2749 ----
+      ShadowTransform();
+  }
+  
++ // added by icfd 100726
++ // begin
++ void TranslateToCentre( Long x, Long y, Long z )
++ {
++     register int ix,iy;
++ 
++     ix = (int)(x*MatX[0]+y*MatX[1]+z*MatX[2]);
++     iy = (int)(x*MatY[0]+y*MatY[1]+z*MatY[2]);
++     if( PickMode == PickOrign )
++     {   DialValue[4] = (Real)-ix/(Zoom*XRange);
++         DialValue[5] = (Real)-iy/(Zoom*YRange);
++     } else
++     {   DialValue[4] = (Real)-ix/XRange;
++         DialValue[5] = (Real)-iy/YRange;
++     }
++     ReDrawFlag |= RFTransX | RFTransY;
++ }
++ // end
++ 
+  /*
+      RMatZtoV computes rotation matrix, RMat, to rotate the Z axis
+      into nomalized vector V, keeping the axis orthogonal to the
+***************
+*** 2970,2975 ****
+--- 3016,3073 ----
+      WorldRotate();
+  }
+  
++ // added by icfd 100723
++ // begin
++ Real FocusScale( Real z )
++ {
++ #define FOCUS_SCALE_MAX 10
++ 
++     Real fn;
++     if (Focus == 0.0) return 1.0;
++     fn = 1.0 - z/(ZOffset * Focus);
++     return (fn > 1.0/FOCUS_SCALE_MAX) ? 1.0/fn : FOCUS_SCALE_MAX;
++ }
++ // end
++ 
++ // added by icfd 100726
++ // begin
++ /* utility function to convert a set of integer coordinates
++  * to perspective projection IN PLACE
++  */
++ void FocusPoint( int *x, int *y, int *z)
++ {
++     Real fn;
++     if (Focus == 0.0) return;
++     fn = FocusScale((double)(*z - ZOffset));
++     *x = (int) ((*x - XOffset) * fn) + XOffset;
++     *y = (int) ((*y - YOffset) * fn) + YOffset;
++ }
++ // end
++ 
++ // added by icfd 100726
++ // begin
++ /* utility functions to return perspectively scaled bond radius */
++ int FocusBond( Bond __far *bptr )
++ {
++     Real fn = FocusScale(-ZOffset +
++                     0.5 * (bptr->srcatom->z + bptr->dstatom->z));
++     int rad = (int)(Scale*bptr->radius * fn);
++     if (rad > MAXRAD/2) rad = MAXRAD/2;
++     return rad;
++ }
++ // end
++ 
++ // added by icfd 100726
++ // begin
++ int FocusHBond( HBond __far *bptr )
++ {
++     Real fn = FocusScale(-ZOffset +
++                     0.5 * (bptr->src->z + bptr->dst->z));
++     int rad = (int)(Scale*bptr->radius * fn);
++     if (rad > MAXRAD/2) rad = MAXRAD/2;
++     return rad;
++ }
++ // end
+  
+  static void ApplyTransformOne( void )
+  {
+diff -cr RasMol_2.7.2.1.1/src/transfor.h RasMol_2.7.2.1.1_20180920/src/transfor.h
+*** RasMol_2.7.2.1.1/src/transfor.h	2004-05-08 04:49:14.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/transfor.h	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 144,149 ****
+--- 144,153 ----
+  #define DefaultAmbient    0.4
+  #endif
+  
++ // added by icfd 100726
++ // begin
++ #define DefaultFocus    0.20
++ // end
+  
+  typedef struct { 
+          Long refcount;
+***************
+*** 165,185 ****
+  #define BackCol    0
+  #define BoxCol     1
+  #define LabelCol   2
+! #define FirstCol   3
+  #endif
+  
+  #ifdef APPLEMAC
+  #define BackCol    1
+  #define BoxCol     2
+  #define LabelCol   3
+! #define FirstCol   4
+  #endif
+  
+  #if !defined(IBMPC) && !defined(APPLEMAC)
+  #define BackCol    5
+  #define BoxCol     6
+  #define LabelCol   7
+! #define FirstCol   8
+  #endif
+  
+  #define Colour2Shade(x)  ((int)((x)-FirstCol)/ColourDepth)
+--- 169,192 ----
+  #define BackCol    0
+  #define BoxCol     1
+  #define LabelCol   2
+! #define AxesCol    3  /*angel*/
+! #define FirstCol   4
+  #endif
+  
+  #ifdef APPLEMAC
+  #define BackCol    1
+  #define BoxCol     2
+  #define LabelCol   3
+! #define AxesCol    4  /*angel*/
+! #define FirstCol   5
+  #endif
+  
+  #if !defined(IBMPC) && !defined(APPLEMAC)
+  #define BackCol    5
+  #define BoxCol     6
+  #define LabelCol   7
+! #define AxesCol    8  /*angel*/
+! #define FirstCol   9
+  #endif
+  
+  #define Colour2Shade(x)  ((int)((x)-FirstCol)/ColourDepth)
+***************
+*** 204,214 ****
+--- 211,228 ----
+  int DotR,DotG,DotB;
+  int LabR,LabG,LabB;
+  int BoxR,BoxG,BoxB;
++ int AxesR,AxesG,AxesB;  /*angel*/
+  int UseLabelCol;
+  int UseBackFade;
+  Real Ambient;
+  int UseDotColPot;
+  
++ // added by icfd 100723
++ // begin
++ Real Scale,MaxZoom,Focus,MinFocus;      /* stern */
++ int MinBoxSep, MaxBoxSep, BoxSep, BoxRad;
++ // end
++ 
+  Real Scale,MaxZoom;
+  Real DScale,IScale;
+  Long SideLen,Offset;
+***************
+*** 253,264 ****
+  extern int DotR,DotG,DotB;
+  extern int LabR,LabG,LabB;
+  extern int BoxR,BoxG,BoxB;
+  extern int UseLabelCol;
+  extern int UseBackFade;
+  extern Real Ambient;
+  extern int UseDotColPot;
+  
+! extern Real Scale,MaxZoom;
+  extern Real DScale,IScale;
+  extern Long SideLen,Offset;
+  extern Card WorldRadius,WorldSize,LocalRadius;
+--- 267,287 ----
+  extern int DotR,DotG,DotB;
+  extern int LabR,LabG,LabB;
+  extern int BoxR,BoxG,BoxB;
++ extern int AxesR,AxesG,AxesB;  /*angel*/
+  extern int UseLabelCol;
+  extern int UseBackFade;
+  extern Real Ambient;
+  extern int UseDotColPot;
+  
+! // modified by icfd 100726
+! // begin
+! extern Real Scale,MaxZoom,Focus,MinFocus;
+! // end
+! 
+! // added by icfd 100723
+! // begin
+! extern int MinBoxSep, MaxBoxSep, BoxSep, BoxRad;
+! // end
+  extern Real DScale,IScale;
+  extern Long SideLen,Offset;
+  extern Card WorldRadius,WorldSize,LocalRadius;
+***************
+*** 353,358 ****
+--- 376,393 ----
+  void PrepareTransform( void );
+  void ReviseInvMatrix( void );
+  void ApplyTransform( void );
++ // added by icfd 100723
++ // begin
++ Real FocusScale( Real );
++ // end
++ 
++ // added by icfd 100726
++ // begin
++ void FocusPoint( int *, int *, int *);
++ int FocusBond( Bond __far * );
++ int FocusHBond( HBond __far * );
++ // end
++ 
+  void CentreTransform( int, int, int, int );
+  void ResetTransform( void );
+  
+Only in RasMol_2.7.2.1.1_20180920/src: vectorps
+diff -cr RasMol_2.7.2.1.1/src/x11win.c RasMol_2.7.2.1.1_20180920/src/x11win.c
+*** RasMol_2.7.2.1.1/src/x11win.c	2004-05-08 04:48:18.000000000 +0900
+--- RasMol_2.7.2.1.1_20180920/src/x11win.c	2018-09-20 16:17:28.000000000 +0900
+***************
+*** 562,579 ****
+  {
+      static char *fontname[] = { "-*-helvetica-bold-o-normal-*-14-*",
+                                       "-*-serf-bold-o-normal-*-14-*",
+!                                         "-*-*-bold-o-normal-*-14-*" };
+      register int i;
+  
+      cross = XCreateFontCursor(dpy,XC_tcross);
+      arrow = XCreateFontCursor(dpy,XC_top_left_arrow);
+  
+!     for( i=0; i<3; i++ )
+          if( (MenuFont=XLoadQueryFont(dpy,fontname[i])) ) 
+              break;
+  
+!     if( !MenuFont )
+          FatalGraphicsError("Unable to find suitable font");
+      FontHigh = MenuFont->max_bounds.descent +
+                 MenuFont->max_bounds.ascent + 1;
+      MenuHigh = FontHigh+6;
+--- 562,587 ----
+  {
+      static char *fontname[] = { "-*-helvetica-bold-o-normal-*-14-*",
+                                       "-*-serf-bold-o-normal-*-14-*",
+!                                         "-*-*-bold-o-normal-*-14-*", 
+!     //added by angel, icfd 20180219
+!     //start
+!                                                        "*Bold*" };
+!     //end
+      register int i;
+  
+      cross = XCreateFontCursor(dpy,XC_tcross);
+      arrow = XCreateFontCursor(dpy,XC_top_left_arrow);
+  
+!     for( i=0; i<4; i++ )
+          if( (MenuFont=XLoadQueryFont(dpy,fontname[i])) ) 
+              break;
+  
+!     if( !MenuFont ) {
+          FatalGraphicsError("Unable to find suitable font");
++         exit(1);
++     }
++ 
++     
+      FontHigh = MenuFont->max_bounds.descent +
+                 MenuFont->max_bounds.ascent + 1;
+      MenuHigh = FontHigh+6;

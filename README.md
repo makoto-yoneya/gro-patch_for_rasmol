@@ -1,4 +1,4 @@
-# rasmol-gro
+# rasmol-gro patch
 
 Patch file for [RasMol][1] ver. 2.7.2.1.1.
 

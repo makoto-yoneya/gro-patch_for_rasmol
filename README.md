@@ -14,7 +14,7 @@ This patch enables
 
 ## Prerequisites
 
-RasMol_2.7.2.1.1 source: RasMol_2.7.2.1.1.tar.gz [2]
+RasMol_2.7.2.1.1 source: [RasMol_2.7.2.1.1.tar.gz][2]
 
 ### Installing
 
